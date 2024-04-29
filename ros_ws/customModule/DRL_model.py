@@ -3,7 +3,6 @@ import numpy as np
 import cv2
 import torch
 import torch.nn as nn
-from config import cfg
 import os
 from torchvision.models import efficientnet_v2_m, EfficientNet_V2_M_Weights, efficientnet_v2_s, EfficientNet_V2_S_Weights,\
 MobileNet_V3_Large_Weights, mobilenet_v3_large

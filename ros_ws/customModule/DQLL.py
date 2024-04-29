@@ -15,9 +15,9 @@ model_path = '/home/base/Workspace/ros_ws/customModule/DQLL_weights'
 class localizator:
     def __init__(self, cuda = True):
         self.net = DRL_model.getModel()
-        net_path = os.path.join(model_path,'localizator.pth')
+        net_path = os.path.join(model_path,'localizator.pt')
         saved_state = torch.load(net_path)
-        self.net.load_state_dict(saved_state['weights'])
+        self.net.load_state_dict(saved_state)
         self.net.eval()
         if cuda:
             self.net.cuda() if torch.cuda.is_available() else self.net.cpu()
@@ -37,7 +37,7 @@ class localizator:
             fea_t = torch.from_numpy(fea_t).cuda()
             pred = self.net(fea_t)
 
-            pred = pred.squeeze().cpu().detach().numpy().astype(np.uint16) * 100
+            xpoint = (pred.squeeze().cpu().detach().numpy() * 100).astype(np.uint16)
             ypoint = self.initMarky
             xpoint, ypoint = np.array(xpoint)*w_ratio + x0, np.array(ypoint)*h_ratio + y0
             landmarks.append(((x,y) for x,y in zip(xpoint, ypoint)))

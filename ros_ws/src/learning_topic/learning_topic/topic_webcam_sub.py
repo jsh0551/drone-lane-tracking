@@ -8,11 +8,13 @@
 
 import rclpy                            # ROS2 Python接口库
 from rclpy.node import Node             # ROS2 节点类
-from sensor_msgs.msg import Image       # 图像消息类型
+from sensor_msgs.msg import Image
+from custom_msgs.msg import ImageWithInfo       # 图像消息类型
 from cv_bridge import CvBridge          # ROS与OpenCV图像转换类
 import cv2                              # Opencv图像处理库
 import numpy as np                      # Python数值计算库
 import sys
+import math
 import torch
 # Load a model
 lower_red = np.array([0, 90, 128])      # 红色的HSV阈值下限
@@ -24,12 +26,41 @@ from models.yolox import Detector
 from yolox_config import opt
 det_model = Detector(opt)
 loc_model = DQLL.localizator()
+camera_fov = 65
+WIDTH, HEIGHT = 480, 360
+s_points = np.array([(0,HEIGHT),(WIDTH,HEIGHT),(WIDTH/4,HEIGHT),(WIDTH*3/4,HEIGHT),(0,HEIGHT*3/4),(WIDTH,HEIGHT*3/4)]).astype(np.int16)
+
+def cal_slope(bgr_img, pitch, roll, f=240.0):
+    '''
+    x : track lane의 중점으로부터의 거리(px)
+    w,h : 이미지 너비,높이(px)
+    alpha : 카메라 기울기 각도. 바닥과 수평시 0도 (radian?)
+    f : 초점거리
+    '''
+    # theta1 = np.arctan((WIDTH/2)/f)
+    # theta2 = np.arctan(np.tan(alpha)*(WIDTH/2)/f)
+    # mid_w = (WIDTH/2)/(1+np.tan(camera_fov/2)/max(np.tan(alpha),1e-5))
+    # dx = WIDTH/2 - mid_w
+    # # dx = (np.sin(theta1) - np.sin(theta2))*WIDTH/2
+    # dy = HEIGHT/2
+    # slope = dy/dx # 90도일 때 매우 큰값으로 바꾸기
+    cx = WIDTH/2
+    # cy = slope*(cx-WIDTH) + HEIGHT
+    offset_y = np.tan(camera_fov/2)
+    cy = (1+np.tan(pitch)/(offset_y*offset_y)) * HEIGHT/2
+    for tmp_x, tmp_y in s_points:
+        m = (cy-tmp_y) / (cx-tmp_x)
+        uy = int(max(0,cy))
+        ux = int((uy-cy)/m + cx)
+        bgr_img = cv2.line(bgr_img,(tmp_x,tmp_y),(ux,uy),(0,255,0),3)
+    # h/2나 2h/3에서 만나는 점 구하기.
+    return bgr_img
 
 class ImageSubscriber(Node):
     def __init__(self, name):
         super().__init__(name)                                  # ROS2节点父类初始化
         self.sub = self.create_subscription(
-            Image, 'image_raw', self.listener_callback, 10)     # 创建订阅者对象（消息类型、话题名、订阅者回调函数、队列长度）
+            ImageWithInfo, 'image_raw', self.listener_callback, 10)     # 创建订阅者对象（消息类型、话题名、订阅者回调函数、队列长度）
         self.cv_bridge = CvBridge()
 
     def stream_camera(self, bgr_img):        # 图像从BGR颜色模型转换为HSV模型
@@ -71,6 +102,7 @@ class ImageSubscriber(Node):
                 bgr_img = cv2.line(bgr_img,(x1,y1),(x2,y2),(255,0,0),3)
                 bgr_img = cv2.line(bgr_img,(x1,y1),(x1,y1),(0,0,255),5)
             bgr_img = cv2.line(bgr_img,(x2,y2),(x2,y2),(0,0,255),5)
+        
         return bgr_img
     
     def numpy_to_tensor(self, x):
@@ -81,7 +113,9 @@ class ImageSubscriber(Node):
 
     def listener_callback(self, data):
         self.get_logger().info('Receiving video frame')         # 输出日志信息，提示已进入回调函数
-        bgr_image = self.cv_bridge.imgmsg_to_cv2(data, 'bgr8')
+        bgr_image = self.cv_bridge.imgmsg_to_cv2(data.image, 'bgr8')
+        pitch = data.pitch
+        roll = data.roll
         rgb_image =  cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
 
         predictions = det_model.run(bgr_image, vis_thresh=0.3)
@@ -91,6 +125,7 @@ class ImageSubscriber(Node):
             x1,y1,x2,y2 = np.array(b).astype(np.uint16)
             bgr_image = cv2.rectangle(bgr_image, (x1,y1),(x2,y2),(0,255,0),2)
         dotted_image = self.pointing(bgr_image, landmarks)
+        dotted_image = cal_slope(dotted_image, pitch, roll)
         self.stream_camera(dotted_image)                               # 苹果检测
 
 def main(args=None):                                        # ROS2节点主入口main函数
