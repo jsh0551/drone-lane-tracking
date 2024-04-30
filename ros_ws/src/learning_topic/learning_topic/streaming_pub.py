@@ -52,7 +52,7 @@ class ImagePublisher(Node):
         # pitch, roll = struct.unpack('>ff', self.client_socket.recv(8))
         data_size = struct.unpack('>I', self.client_socket.recv(4))[0]
         # 이미지 데이터와 각도 데이터 수신
-        remaining = data_size + 8  # 이미지 데이터 길이 + float 2개 (pitch, roll)
+        remaining = data_size + 12  # 이미지 데이터 길이 + float 2개 (pitch, roll)
         received_data = b''
 
         while len(received_data) < remaining:
@@ -64,10 +64,11 @@ class ImagePublisher(Node):
         # 이미지 데이터와 각도 데이터 분리
         img_data = received_data[:data_size]
         if img_data is not None:
-            pitch, roll = struct.unpack('>ff', received_data[data_size:data_size+8])
+            yaw, pitch, roll = struct.unpack('>fff', received_data[data_size:data_size+12])
             nparr = np.frombuffer(img_data, np.uint8)
             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             self.msg.image = self.cv_bridge.cv2_to_imgmsg(frame, 'bgr8')
+            self.msg.yaw = yaw
             self.msg.pitch = pitch                                   
             self.msg.roll = roll                                   
             self.publisher_.publish(self.msg)
