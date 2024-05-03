@@ -1,9 +1,11 @@
-ros_ws/customModule/DQLL_weights
+customModule/DQLL_weights/*
 __pycache__
 log
 exp
 weights
 ros_ws/build
 ros_ws/install
+dev_ws/build
+dev_ws/install
 DRL_model1.py
 test_video

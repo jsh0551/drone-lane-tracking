@@ -7,7 +7,7 @@ import os
 import sys
 from easydict import EasyDict
 from utils.util import merge_opt
-
+BASE = os.getcwd()[:max(os.getcwd().find('dev_ws'),os.getcwd().find('ros_ws'))]
 
 def update_nano_tiny(cfg, inp_params):
     # yolo-nano, yolo-tiny config:
@@ -74,7 +74,7 @@ opt.data_num_workers = 4
 
 opt.momentum = 0.9
 opt.vis_thresh = 0.3  # inference confidence, used in 'predict.py'
-opt.load_model = '/home/base/Workspace/ros_ws/customModule/DQLL_weights/detector.pth'
+opt.load_model = os.path.join(BASE,"customModule/DQLL_weights","detector.pth")
 opt.ema = True  # False, Exponential Moving Average
 opt.grad_clip = dict(max_norm=35, norm_type=2)  # None, clip gradient makes training more stable
 opt.print_iter = 1  # print loss every 1 iteration

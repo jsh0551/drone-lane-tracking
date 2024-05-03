@@ -6,10 +6,10 @@ import numpy as np
 import torch.nn as nn
 import DRL_model
 from PIL import Image
-from torchvision.models.detection import FasterRCNN_MobileNet_V3_Large_320_FPN_Weights
 MEAN = np.array([0.485, 0.456, 0.406])
 STD = np.array([0.229, 0.224, 0.225])
-model_path = '/home/base/Workspace/ros_ws/customModule/DQLL_weights'
+BASE = os.getcwd()[:max(os.getcwd().find('dev_ws'),os.getcwd().find('ros_ws'))]
+model_path = os.path.join(BASE,"customModule/DQLL_weights")
 
 
 class localizator:
