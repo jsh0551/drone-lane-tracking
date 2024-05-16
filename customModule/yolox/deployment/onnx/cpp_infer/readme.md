@@ -1,1 +1,0 @@
-The code used to demonstrate the inference with CPP&onnxruntime.
