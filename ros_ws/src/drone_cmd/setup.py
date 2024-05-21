@@ -23,7 +23,10 @@ setup(
     entry_points={
         'console_scripts': [
             'control = drone_cmd.main_controller:main',
+            'set_local = drone_cmd.set_local_origin:main',
             'test = drone_cmd.test:main',
+            'test_direct = drone_cmd.send_direct_test:main',
+            'test_circle = drone_cmd.send_circle_test:main',
             'vel = drone_cmd.send_velocity:main',
             'takeoff = drone_cmd.cmd_takeoff:main',
             'drive = drone_cmd.cmd_drive:main',
