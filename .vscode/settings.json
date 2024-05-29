@@ -1,0 +1,22 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/admin957_2/drone-lane-tracking/install/test_py_pkg/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/learning_topic/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/drone_cmd/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/custom_msgs/local/lib/python3.10/dist-packages",
+        "/home/admin957_2/drone-lane-tracking/install/auto_drone/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/custom_message/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/admin957_2/drone-lane-tracking/install/test_py_pkg/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/learning_topic/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/drone_cmd/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/custom_msgs/local/lib/python3.10/dist-packages",
+        "/home/admin957_2/drone-lane-tracking/install/auto_drone/lib/python3.10/site-packages",
+        "/home/admin957_2/drone-lane-tracking/install/custom_message/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}

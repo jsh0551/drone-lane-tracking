@@ -2,26 +2,26 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    cam_node = Node(
+    node_cam = Node(
             package='auto_drone',
-            executable='camera_node',
+            executable='node_camera',
             name='dual_camera_node',
             output='screen'
         )
-    detection_node = Node(
+    node_detection = Node(
             package='auto_drone',
-            executable='detection_node',
+            executable='node_detection_line',
             parameters=[],
             output='screen'
         )
-    control_node = Node(
+    node_control = Node(
             package='auto_drone',
             namespace='control',
-            executable='control_direction_node',
+            executable='node_control_direction',
             name='control'
         )
     return LaunchDescription([
-        cam_node,
-        detection_node,
-        control_node
+        node_cam,
+        node_detection,
+        node_control
     ])

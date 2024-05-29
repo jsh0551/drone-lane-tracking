@@ -24,8 +24,8 @@ class CameraNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    camera_node1 = CameraNode('camera_node1', 'camera1', '/dev/video0')
-    camera_node2 = CameraNode('camera_node2', 'camera2', '/dev/video2')
+    camera_node1 = CameraNode('node_camera_1', 'camera1', '/dev/video0')
+    camera_node2 = CameraNode('node_camera_2', 'camera2', '/dev/video2')
 
     executor = rclpy.executors.MultiThreadedExecutor()
     executor.add_node(camera_node1)

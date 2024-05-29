@@ -25,7 +25,7 @@ class PIDController():
 
 class DirectionNodePID(Node):
     def __init__(self):
-        super().__init__("control_direction_node")
+        super().__init__("node_control_direction")
         self.subscriber_landmark = self.create_subscription(
             LandmarkCloud, '/landmark_points', self.listener_callback, 10)
         self.subscriber_pose = self.create_subscription(
