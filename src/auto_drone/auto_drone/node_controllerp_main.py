@@ -54,6 +54,8 @@ class MainServer(Node):
             self.cmd_state = 3
         return response
 
+
+
 class TakeoffNode(Node):
     def __init__(self):
         super().__init__('takeoff_node')                                                          
@@ -72,6 +74,7 @@ class TakeoffNode(Node):
             self.get_logger().info('takeoff request fail..')
 
 
+
 class ArmNode(Node):
     def __init__(self):
         super().__init__('arm_node')                                        
@@ -85,6 +88,7 @@ class ArmNode(Node):
     def send_request(self):
         self.request.value = self.arming
         self.future = self.client.call_async(self.request)
+
 
         
 class LandNode(Node):
@@ -105,6 +109,7 @@ class LandNode(Node):
             self.get_logger().info('landing request fail..')       
 
 
+
 class DriveSwitchNode(Node):
     def __init__(self):
         super().__init__('driveswitch_node')                                                             
@@ -122,6 +127,7 @@ class DriveSwitchNode(Node):
             self.switch = not self.switch
         else:
             self.get_logger().info('switching request fail..')
+
 
 
 class StateListener(Node):
