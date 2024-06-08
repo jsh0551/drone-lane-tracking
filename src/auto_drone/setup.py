@@ -23,9 +23,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'camera_node = auto_drone.camera_node:main',
-            'detection_node = auto_drone.detection_node:main',
-            'control_direction_node = auto_drone.control_direction_node:main'
+            'server_node = auto_drone.node_controller_main:main',
+            'camera_node = auto_drone.node_camera:main',
+            'line_detection_node = auto_drone.node_detection_line:main',
+            'control_direction_node = auto_drone.node_control_direction:main'
         ],
     },
 )
