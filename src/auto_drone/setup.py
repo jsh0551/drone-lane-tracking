@@ -24,9 +24,15 @@ setup(
     entry_points={
         'console_scripts': [
             'server_node = auto_drone.node_controller_main:main',
+            'vel_node = auto_drone.send_velocity:main',
             'camera_node = auto_drone.node_camera:main',
+            'airsim_cam1_node = auto_drone.node_camera1_airsim:main',
+            'airsim_cam2_node = auto_drone.node_camera2_airsim:main',
             'line_detection_node = auto_drone.node_detection_line:main',
-            'control_direction_node = auto_drone.node_control_direction:main'
+            'control_direction_node = auto_drone.node_control_direction:main',
+            'takeoff = auto_drone.cmd_takeoff:main',
+            'land = auto_drone.cmd_land:main',
+            'drive = auto_drone.cmd_drive:main'
         ],
     },
 )
