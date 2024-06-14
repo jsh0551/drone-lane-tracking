@@ -7,11 +7,6 @@ def generate_launch_description():
         executable='server_node',
         output='screen'
     )
-    node_vel = Node(
-        package='auto_drone',
-        executable='vel_node',
-        output='screen'
-    )
     node_cam = Node(
         package='auto_drone',
         executable='camera_node',
@@ -27,13 +22,12 @@ def generate_launch_description():
     node_control = Node(
         package='auto_drone',
         namespace='control',
-        executable='control_direction_node',
+        executable='control_velocity_node',
         name='control',
         output='screen'
     )
     return LaunchDescription([
         node_server,
-        node_vel,
         node_cam,
         node_detection,
         node_control

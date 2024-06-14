@@ -164,8 +164,8 @@ class DirectionNodePID(Node):
 
     def timer_callback(self):
         self.publisher.publish(self.twist)
-        self.get_logger().info("Following track with linear.x: {:.2f} m/s, linear.y: {:.2f} m/s, angular.z: {:.2f} rad/s"\
-                               .format(self.twist.linear.x, self.twist.linear.y, self.twist.angular.z))
+        # self.get_logger().info("Following track with linear.x: {:.2f} m/s, linear.y: {:.2f} m/s, angular.z: {:.2f} rad/s"\
+        #                        .format(self.twist.linear.x, self.twist.linear.y, self.twist.angular.z))
 
 
 

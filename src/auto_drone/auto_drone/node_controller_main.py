@@ -30,6 +30,7 @@ class MainServer(Node):
         super().__init__('main_server')
         self.takeoff_service = self.create_service(SetBool, 'server/takeoff', self.get_takeoff)
         self.drive_service = self.create_service(SetBool, 'server/drive', self.get_drive)
+        self.drive_auto_service = self.create_service(SetBool, 'server/drive_auto', self.get_drive_auto)
         self.land_service = self.create_service(SetBool, 'server/land', self.get_land)
         self.cmd_state = 0
 
@@ -47,11 +48,18 @@ class MainServer(Node):
             self.cmd_state = 2
         return response
 
+    def get_drive_auto(self, request, response):
+        if request.data:
+            self.get_logger().info('received drive auto command')
+            response.success = True
+            self.cmd_state = 3
+        return response
+
     def get_land(self, request, response):
         if request.data:
             self.get_logger().info('received land command')
             response.success = True
-            self.cmd_state = 3
+            self.cmd_state = 4
         return response
 
 
@@ -239,8 +247,36 @@ def main(args=None):
                 rclpy.spin_once(state_listener)
                 if state_listener.msg_mode == 'AUTO.LOITER':
                     break
-        # land
+        # drive auto
         elif main_server.cmd_state == 3:
+            mode_changer.send_mode_change_request('OFFBOARD')
+            mode_changer.get_logger().info('wait for state response..')
+            time.sleep(mode_response_time)
+            rclpy.spin_once(state_listener)
+            # if loiter mode or no velocity topic, not switching to drive mode
+            if state_listener.msg_mode == 'AUTO.LOITER':
+                mode_changer.send_mode_change_request('OFFBOARD')
+                mode_changer.get_logger().warn(f'no velocity topic!')
+            elif not state_listener.msg_armed:
+                state_listener.get_logger().warn(f'not armed!')
+            # drive mode
+            else:
+                while not driveswitch_node.switch:
+                    rclpy.spin_once(driveswitch_node)
+                count = 0
+                while count < 800:
+                    count += 1
+                    time.sleep(0.1)
+                while driveswitch_node.switch:
+                    rclpy.spin_once(driveswitch_node)
+            time.sleep(stablizing_time)
+            mode_changer.send_mode_change_request('AUTO.LOITER')
+            while True:
+                rclpy.spin_once(state_listener)
+                if state_listener.msg_mode == 'AUTO.LOITER':
+                    break
+        # land
+        elif main_server.cmd_state == 4:
             while not land_node.future:
                 rclpy.spin_once(land_node)
             land_node.future = False

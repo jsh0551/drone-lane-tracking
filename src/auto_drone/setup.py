@@ -30,9 +30,11 @@ setup(
             'airsim_cam2_node = auto_drone.node_camera2_airsim:main',
             'line_detection_node = auto_drone.node_detection_line:main',
             'control_direction_node = auto_drone.node_control_direction:main',
+            'control_velocity_node = auto_drone.node_control_velocity:main',
             'takeoff = auto_drone.cmd_takeoff:main',
             'land = auto_drone.cmd_land:main',
-            'drive = auto_drone.cmd_drive:main'
+            'drive = auto_drone.cmd_drive:main',
+            'drive_auto = auto_drone.cmd_drive_auto:main'
         ],
     },
 )

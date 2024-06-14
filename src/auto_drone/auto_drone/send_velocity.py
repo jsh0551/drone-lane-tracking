@@ -107,7 +107,7 @@ class PositionPublisher(Node):
         self.pose.header.stamp = self.get_clock().now().to_msg()
         self.pose.header.frame_id = ''
         pid_value = self.cal_pid()
-        self.get_logger().info(f'pid value : {pid_value}')
+        # self.get_logger().info(f'pid value : {pid_value}')
         if self.flag:
             if self.step < count:
                 self.pose.twist.linear.x = -min(float(self.step)/4, vel) 

@@ -29,10 +29,10 @@ opt.exp_id = "coco_CSPDarknet-s_640x640"  # experiment name, you can change it t
 opt.dataset_path = "../data/coco"  # COCO detection
 # opt.dataset_path = r"D:\work\public_dataset\coco2017"  # Windows system
 opt.backbone = "CSPDarknet-m"  # CSPDarknet-nano, CSPDarknet-tiny, CSPDarknet-s, CSPDarknet-m, l, x
-opt.input_size = (640, 640)
+opt.input_size = (320, 640)
 # opt.random_size = (14, 26)  # None; multi-size train: from 448(14*32) to 832(26*32), set None to disable it
 opt.random_size = None  # None; multi-size train: from 448(14*32) to 832(26*32), set None to disable it
-opt.test_size = (640, 640)  # evaluate size
+opt.test_size = (320, 640)  # evaluate size
 opt.gpus = "0"  # "-1" "0" "3,4,5" "0,1,2,3,4,5,6,7" # -1 for cpu
 opt.batch_size = 24
 opt.master_batch_size = -1  # batch size in first gpu. -1 means: master_batch_size=batch_size//len(gpus)
@@ -40,7 +40,7 @@ opt.num_epochs = 300
 
 # coco 80 classes
 opt.label_name = [
-    'upleft','upright']
+    'line']
 
 # TODO: support MOT(multi-object tracking) like FairMot/JDE when reid_dim > 0
 opt.reid_dim = 0  # 128  used in MOT, will add embedding branch if reid_dim>0

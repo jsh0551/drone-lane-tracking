@@ -21,11 +21,11 @@ class localizator:
         self.net.eval()
         if cuda:
             self.net.cuda() if torch.cuda.is_available() else self.net.cpu()
-        self.initMarky = [11.0, 31.0, 51.0, 71.0, 91.0]
+        self.initMarky = [5.0, 20.0, 35.0, 50.0, 65.0, 80.0, 95.0]
 
 
     def inference(self, imgs, labels, coords, ratios):
-        landmarks = []
+        landmarksX, landmarksY = [], []
         for img,label,coord,ratio in zip(imgs,labels,coords,ratios):
             w_ratio, h_ratio = ratio
             x0, y0 = coord
@@ -40,6 +40,7 @@ class localizator:
             xpoint = (pred.squeeze().cpu().detach().numpy() * 100).astype(np.uint16)
             ypoint = self.initMarky
             xpoint, ypoint = np.array(xpoint)*w_ratio + x0, np.array(ypoint)*h_ratio + y0
-            landmarks.append(((x,y) for x,y in zip(xpoint, ypoint)))
+            landmarksX.append(xpoint)
+            landmarksY.append(ypoint)
 
-        return landmarks
+        return landmarksX, landmarksY
