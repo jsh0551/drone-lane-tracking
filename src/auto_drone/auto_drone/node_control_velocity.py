@@ -19,7 +19,6 @@ sys.path.append(os.path.join(BASE, "src","utils"))
 from tools import *
 
 count = 40
-vel = 1.0
 kp = 0.6
 ki = 0.1
 kd = 0.05

@@ -21,9 +21,9 @@ depth=1
 )
 stablizing_time = 5
 mode_response_time = 10
-alt_threshold = 0.5
+alt_threshold = 1.6
 land_threshold = 0.0
-max_count = 240
+max_count = 160
 
 class MainServer(Node):
     def __init__(self):
@@ -41,26 +41,27 @@ class MainServer(Node):
             self.cmd_state = 1
         return response
 
+    def get_land(self, request, response):
+        if request.data:
+            self.get_logger().info('received land command')
+            response.success = True
+            self.cmd_state = 2
+        return response
+
     def get_drive(self, request, response):
         if request.data:
             self.get_logger().info('received drive command')
             response.success = True
-            self.cmd_state = 2
+            self.cmd_state = 3
         return response
 
     def get_drive_auto(self, request, response):
         if request.data:
             self.get_logger().info('received drive auto command')
             response.success = True
-            self.cmd_state = 3
-        return response
-
-    def get_land(self, request, response):
-        if request.data:
-            self.get_logger().info('received land command')
-            response.success = True
             self.cmd_state = 4
         return response
+
 
 
 
@@ -75,6 +76,7 @@ class TakeoffNode(Node):
         self.future = False
 
     def send_request(self):
+        # self.request.altitude = alt_threshold
         self.future = self.client.call_async(self.request)
         if self.future:
             self.get_logger().info('takeoffing..')
@@ -199,11 +201,14 @@ def main(args=None):
     state_listener = StateListener()
     mode_changer = ModeChanger()
 
-    # state : loiter(0), takeoff(1), drive(2), land(3)
+    # state : loiter(0), takeoff(1), land(2), drive(etc)
     while True:
         rclpy.spin_once(main_server)
-        # takeoff
-        if main_server.cmd_state == 1:
+        # 0. no signal
+        if main_server.cmd_state == 0:
+            pass
+        # 1. takeoff
+        elif main_server.cmd_state == 1:
             while not takeoff_node.future:
                 rclpy.spin_once(takeoff_node)
             takeoff_node.future = False
@@ -211,72 +216,12 @@ def main(args=None):
                 arm_node.arming = True
                 rclpy.spin_once(arm_node)
                 rclpy.spin_once(state_listener)
+            mode_changer.send_mode_change_request('AUTO.LOITER') # TODO : 높이 조절. takeoff node에서 바로 높이 명령 줄 수 있는지도 확인
             takeoff_node.get_logger().info('takeoff stablizing..')
             time.sleep(stablizing_time)
             takeoff_node.get_logger().info('takeoff done!\n')
-        # drive
+        # 2. land
         elif main_server.cmd_state == 2:
-            mode_changer.send_mode_change_request('OFFBOARD')
-            mode_changer.get_logger().info('wait for state response..')
-            time.sleep(mode_response_time)
-            rclpy.spin_once(state_listener)
-            # if loiter mode or no velocity topic, not switching to drive mode
-            if state_listener.msg_mode == 'AUTO.LOITER':
-                mode_changer.send_mode_change_request('OFFBOARD')
-                mode_changer.get_logger().warn(f'no velocity topic!')
-            elif not state_listener.msg_armed:
-                state_listener.get_logger().warn(f'not armed!')
-            # drive mode
-            else:
-                while not driveswitch_node.switch:
-                    rclpy.spin_once(driveswitch_node)
-                count = 0
-                while True:
-                    count += 1
-                    state_listener.get_logger().info(f'moving count : {count}')
-                    if count >= max_count:
-                        while driveswitch_node.switch:
-                            rclpy.spin_once(driveswitch_node)
-                        break
-                    time.sleep(0.1)
-            time.sleep(stablizing_time)
-
-            count = 0
-            mode_changer.send_mode_change_request('AUTO.LOITER')
-            while True:
-                rclpy.spin_once(state_listener)
-                if state_listener.msg_mode == 'AUTO.LOITER':
-                    break
-        # drive auto
-        elif main_server.cmd_state == 3:
-            mode_changer.send_mode_change_request('OFFBOARD')
-            mode_changer.get_logger().info('wait for state response..')
-            time.sleep(mode_response_time)
-            rclpy.spin_once(state_listener)
-            # if loiter mode or no velocity topic, not switching to drive mode
-            if state_listener.msg_mode == 'AUTO.LOITER':
-                mode_changer.send_mode_change_request('OFFBOARD')
-                mode_changer.get_logger().warn(f'no velocity topic!')
-            elif not state_listener.msg_armed:
-                state_listener.get_logger().warn(f'not armed!')
-            # drive mode
-            else:
-                while not driveswitch_node.switch:
-                    rclpy.spin_once(driveswitch_node)
-                count = 0
-                while count < 800:
-                    count += 1
-                    time.sleep(0.1)
-                while driveswitch_node.switch:
-                    rclpy.spin_once(driveswitch_node)
-            time.sleep(stablizing_time)
-            mode_changer.send_mode_change_request('AUTO.LOITER')
-            while True:
-                rclpy.spin_once(state_listener)
-                if state_listener.msg_mode == 'AUTO.LOITER':
-                    break
-        # land
-        elif main_server.cmd_state == 4:
             while not land_node.future:
                 rclpy.spin_once(land_node)
             land_node.future = False
@@ -288,6 +233,47 @@ def main(args=None):
             time.sleep(stablizing_time)
             mode_changer.send_mode_change_request('AUTO.LOITER')
             land_node.get_logger().info('landing done!\n')
+        # etc. drive
+        else:
+            mode_changer.send_mode_change_request('OFFBOARD')
+            mode_changer.get_logger().info('wait for state response..')
+            time.sleep(mode_response_time)
+            rclpy.spin_once(state_listener)
+            # if loiter mode or no velocity topic, not switching to drive mode
+            if state_listener.msg_mode == 'AUTO.LOITER':
+                mode_changer.send_mode_change_request('OFFBOARD')
+                mode_changer.get_logger().warn(f'no velocity topic!')
+            elif not state_listener.msg_armed:
+                state_listener.get_logger().warn(f'not armed!')
+            # do drive
+            else:
+                while not driveswitch_node.switch:
+                    rclpy.spin_once(driveswitch_node)
+                # 3. select rulebase drive mode
+                if main_server.cmd_state == 3:
+                    count = 0
+                    while True:
+                        count += 1
+                        if count >= max_count:
+                            while driveswitch_node.switch:
+                                rclpy.spin_once(driveswitch_node)
+                            break
+                        time.sleep(0.1)
+                # 4. select auto drive mode
+                elif main_server.cmd_state == 4:
+                    count = 0
+                    while count < 800:
+                        count += 1
+                        time.sleep(0.1)
+                    while driveswitch_node.switch:
+                        rclpy.spin_once(driveswitch_node)
+            time.sleep(stablizing_time)
+            count = 0
+            while True:
+                mode_changer.send_mode_change_request('AUTO.LOITER')
+                rclpy.spin_once(state_listener)
+                if state_listener.msg_mode == 'AUTO.LOITER':
+                    break
 
         main_server.cmd_state = 0
 

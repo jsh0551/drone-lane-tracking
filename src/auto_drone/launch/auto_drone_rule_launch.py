@@ -18,16 +18,9 @@ def generate_launch_description():
         name='dual_camera_node',
         output='screen'
     )
-    node_detection = Node(
-        package='auto_drone',
-        executable='line_detection_node',
-        parameters=[],
-        output='screen'
-    )
 
     return LaunchDescription([
         node_server,
         node_vel,
-        node_cam,
-        node_detection
+        node_cam
     ])

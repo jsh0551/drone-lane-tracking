@@ -100,15 +100,16 @@ class PositionPublisher(Node):
         self.pose.header.frame_id = ''
         # self.get_logger().info(f'pid value : {pid_value}')
         if self.flag:
-            self.get_logger().info(f'step : {self.step}')
-            if self.step < count:
-                self.pose.twist.linear.x = min(float(self.step)/4, vel) 
-                self.pose.twist.linear.y = 0.0
-                self.pose.twist.linear.z = 0.0
-            else:
-                self.pose.twist.linear.x = -min(float(count*2-self.step)/4, vel)  
-                self.pose.twist.linear.y = 0.0
-                self.pose.twist.linear.z = 0.0
+            dtheta = 2*np.pi/(count*2)
+            velx = vel*np.cos(self.angle)
+            vely = vel*np.sin(self.angle)
+            self.pose.twist.linear.x = velx
+            self.pose.twist.linear.y = vely
+            self.pose.twist.linear.z = 0.0
+            self.pose.twist.angular.x = 0.0
+            self.pose.twist.angular.y = 0.0
+            self.pose.twist.angular.z = dtheta*period
+            self.angle += dtheta
             self.step += 1
             if self.step >= count*2:
                 self.step = 0           

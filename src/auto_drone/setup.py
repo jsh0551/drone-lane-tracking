@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             'server_node = auto_drone.node_controller_main:main',
             'vel_node = auto_drone.send_velocity:main',
+            'vel_circle_node = auto_drone.send_velocity_circle:main',
             'camera_node = auto_drone.node_camera:main',
             'airsim_cam1_node = auto_drone.node_camera1_airsim:main',
             'airsim_cam2_node = auto_drone.node_camera2_airsim:main',

@@ -7,28 +7,27 @@ def generate_launch_description():
         executable='server_node',
         output='screen'
     )
-    node_cam = Node(
+    node_vel = Node(
         package='auto_drone',
-        executable='camera_node',
+        executable='vel_node',
+        output='screen'
+    )
+    node_cam1 = Node(
+        package='auto_drone',
+        executable='airsim_cam1_node',
         name='dual_camera_node',
         output='screen'
     )
-    node_detection = Node(
+    node_cam2 = Node(
         package='auto_drone',
-        executable='line_detection_node',
-        parameters=[],
+        executable='airsim_cam2_node',
+        name='dual_camera_node',
         output='screen'
     )
-    node_control = Node(
-        package='auto_drone',
-        namespace='control',
-        executable='control_velocity_node',
-        name='control',
-        output='screen'
-    )
+
     return LaunchDescription([
         node_server,
-        node_control,
-        node_cam,
-        node_detection
+        node_vel,
+        node_cam1,
+        node_cam2
     ])
