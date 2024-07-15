@@ -245,8 +245,9 @@ def main(args=None):
                 mode_changer.get_logger().warn(f'no velocity topic!')
             elif not state_listener.msg_armed:
                 state_listener.get_logger().warn(f'not armed!')
-            # do drive
+            # TODO : adjust zero point and do drive
             else:
+                time.sleep(3)
                 while not driveswitch_node.switch:
                     rclpy.spin_once(driveswitch_node)
                 # 3. select rulebase drive mode
@@ -262,7 +263,7 @@ def main(args=None):
                 # 4. select auto drive mode
                 elif main_server.cmd_state == 4:
                     count = 0
-                    while count < 800:
+                    while count < 1600:
                         count += 1
                         time.sleep(0.1)
                     while driveswitch_node.switch:

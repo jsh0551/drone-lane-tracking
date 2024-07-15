@@ -28,7 +28,7 @@ opt = EasyDict()
 opt.exp_id = "coco_CSPDarknet-s_640x640"  # experiment name, you can change it to any other name
 opt.dataset_path = "../data/coco"  # COCO detection
 # opt.dataset_path = r"D:\work\public_dataset\coco2017"  # Windows system
-opt.backbone = "CSPDarknet-m"  # CSPDarknet-nano, CSPDarknet-tiny, CSPDarknet-s, CSPDarknet-m, l, x
+opt.backbone = "CSPDarknet-s"  # CSPDarknet-nano, CSPDarknet-tiny, CSPDarknet-s, CSPDarknet-m, l, x
 opt.input_size = (320, 640)
 # opt.random_size = (14, 26)  # None; multi-size train: from 448(14*32) to 832(26*32), set None to disable it
 opt.random_size = None  # None; multi-size train: from 448(14*32) to 832(26*32), set None to disable it
@@ -73,7 +73,7 @@ opt.mixup_prob = 0.
 opt.data_num_workers = 4
 
 opt.momentum = 0.9
-opt.vis_thresh = 0.3  # inference confidence, used in 'predict.py'
+opt.vis_thresh = 0.2  # inference confidence, used in 'predict.py'
 opt.load_model = os.path.join(BASE,"src/model_linedet/weights_dqll","detector.pth")
 opt.ema = True  # False, Exponential Moving Average
 opt.grad_clip = dict(max_norm=35, norm_type=2)  # None, clip gradient makes training more stable

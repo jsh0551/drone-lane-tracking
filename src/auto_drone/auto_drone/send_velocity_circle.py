@@ -122,6 +122,7 @@ class PositionPublisher(Node):
             self.pose.twist.angular.z = 0.0
         self.get_logger().info(f'altitude : {self.altitude}, local altitude : {self.local_alt}')
         self.get_logger().info(f'roll {round(np.degrees(self.roll),4)}, pitch : {round(np.degrees(self.pitch),4)}, yaw : {round(np.degrees(self.yaw),4)}')
+        self.get_logger().info(f'x : {self.x}, y : {self.y}, z : {self.z}')
         self.publisher.publish(self.pose)
 
 def main(args=None):

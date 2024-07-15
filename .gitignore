@@ -12,3 +12,6 @@ DRL_model1.py
 test_video
 build
 install
+drone_data/*
+src/model_linedet/weights_dqll/*.pth
+src/model_linedet/weights_dqll/*.pt
