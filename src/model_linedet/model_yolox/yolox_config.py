@@ -73,7 +73,7 @@ opt.mixup_prob = 0.
 opt.data_num_workers = 4
 
 opt.momentum = 0.9
-opt.vis_thresh = 0.2  # inference confidence, used in 'predict.py'
+opt.vis_thresh = 0.3  # inference confidence, used in 'predict.py'
 opt.load_model = os.path.join(BASE,"src/model_linedet/weights_dqll","detector.pth")
 opt.ema = True  # False, Exponential Moving Average
 opt.grad_clip = dict(max_norm=35, norm_type=2)  # None, clip gradient makes training more stable
@@ -83,7 +83,7 @@ opt.save_epoch = 1  # save check point every 1 epoch
 opt.resume = False  # resume from 'model_last.pth' when set True
 opt.use_amp = False  # True, Automatic mixed precision
 opt.cuda_benchmark = True
-opt.nms_thresh = 0.65  # nms IOU threshold in post process
+opt.nms_thresh = 0.3  # 0.65 nms IOU threshold in post process
 opt.occupy_mem = False  # pre-allocate gpu memory for training to avoid memory Fragmentation.
 
 opt.rgb_means = [0.485, 0.456, 0.406]

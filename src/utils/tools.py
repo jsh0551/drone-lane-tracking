@@ -2,10 +2,36 @@ import os
 import numpy as np
 import cv2
 from tf_transformations import quaternion_from_euler
-from scipy.spatial.distance import directed_hausdorff
 
-def adjustable_scale(x, alpha = 5):
-    return x**3 + alpha*x
+class PIDController():
+    def __init__(self, kp, ki, kd, dt):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.previous_error = 0
+        self.integral = 0
+        self.dt = dt
+
+    def compute(self, error):
+        self.integral += error * self.dt
+        derivative = (error - self.previous_error)/self.dt
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        self.previous_error = error
+        return output
+    
+    def reset(self):
+        self.previous_error = 0
+        self.integral = 0
+
+def calculate_angle(polyline, pitch, vfov):
+    mi = len(polyline)//2
+    bx,by = polyline[-1]
+    mx,my = polyline[0] # TODO change this in the future
+    dx = mx -bx
+    dy = my - by
+    dy /= 1/np.tan(pitch) - 1/np.tan(pitch + vfov/2) 
+    theta = np.arctan(dx/dy)
+    return theta
 
 def calculate_quaternion(yaw_deg, pitch_deg, roll_deg):
     """Calculate quaternion from yaw, pitch, and roll in degrees."""
@@ -18,19 +44,16 @@ def calculate_quaternion(yaw_deg, pitch_deg, roll_deg):
 def calculate_curvature(a, b, c, x):
     # 1차 도함수 y' = 2ax + b
     y_prime = 2 * a * x + b
-    
     # 2차 도함수 y'' = 2a
     y_double_prime = 2 * a
-    
     # 곡률 공식 적용
     kappa = np.abs(y_double_prime) / (1 + y_prime**2)**(3/2)
-    
     return kappa
 
-def calculate_slope(bot_point, pitch, width, height):
+def calculate_slope(bot_point, pitch, width, height, fov=65):
     # principle point
     cx = width/2
-    cy = height/2 + 240*np.tan(pitch)
+    cy = height/2 + width/(2*np.tan(np.radians(fov)/2))*np.tan(pitch)
     # cal slope
     bx, by = bot_point
     slope = (cy-by) / (cx-bx)
@@ -97,45 +120,6 @@ def nms(boxes, iou_threshold):
         order = order[inds + 1]
 
     return keep
-
-class PIDController():
-    def __init__(self, kp, ki, kd):
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
-        self.previous_error = 0
-        self.integral = 0
-    
-    def compute(self, error):
-        self.integral += error
-        derivative = error - self.previous_error
-        output = self.kp * error + self.ki * self.integral + self.kd * derivative
-        self.previous_error = error
-        return output
-    
-class KalmanFilterPolylineTracker:
-    def __init__(self, initial_polyline):
-        self.n_points = len(initial_polyline)
-        self.kalman_filters = []
-
-        for point in initial_polyline:
-            kf = cv2.KalmanFilter(4, 2)
-            kf.measurementMatrix = np.array([[1, 0, 0, 0],
-                                             [0, 1, 0, 0]], np.float32)
-            kf.transitionMatrix = np.array([[1, 0, 1, 0],
-                                            [0, 1, 0, 1],
-                                            [0, 0, 1, 0],
-                                            [0, 0, 0, 1]], np.float32)
-            kf.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
-            kf.statePre = np.array([point[0], point[1], 0, 0], np.float32)
-            self.kalman_filters.append(kf)
-
-    def predict(self):
-        return [kf.predict()[:2].flatten() for kf in self.kalman_filters]
-
-    def correct(self, measurements):
-        return [kf.correct(m.astype(np.float32).reshape(-1, 1))[:2].flatten() 
-                for kf, m in zip(self.kalman_filters, measurements)]
     
 def normalize_polyline(polyline):
     """
@@ -170,33 +154,58 @@ def resample_polyline(polyline, num_points):
     distances = np.linspace(0, cumulative_distances[-1], num_points)
     return np.array([np.interp(distances, cumulative_distances, polyline[:, i]) for i in range(2)]).T
 
-def calculate_similarity(polyline1, polyline2, num_points=100):
+
+def calculate_similarity(polyline1, polyline2,  w, h, num_points=100, with_position=False, pos_ratio=0.7):
     """
-    Calculate the similarity between two polylines, considering only their shape.
+    Calculate the similarity between two polylines, considering their shape and optionally their average position.
+    
+    Args:
+    - polyline1, polyline2: Input polylines
+    - num_points: Number of points to resample the polylines
+    - with_position: If True, consider the average position of polylines in similarity calculation
     
     Returns:
     - similarity: A float between 0 and 1.
-      1 indicates identical shapes, 
-      values close to 0 indicate very different shapes.
+      1 indicates identical shapes (and average positions if with_position is True), 
+      values close to 0 indicate very different shapes/positions.
     """
     try:
-        # Normalize both polylines
+        # Normalize and resample both polylines
         norm1 = normalize_polyline(polyline1)
         norm2 = normalize_polyline(polyline2)
-        
-        # Resample the normalized polylines
         resampled1 = resample_polyline(norm1, num_points)
         resampled2 = resample_polyline(norm2, num_points)
+        
+        # Calculate shape similarity
+        shape_distances = np.sqrt(np.sum((resampled1 - resampled2)**2, axis=1))
+        shape_similarity = 1 / (1 + np.mean(shape_distances))
+        
+        if with_position:
+            # Calculate position similarity
+            pos_norm1 = polyline1/np.array([w,h])
+            pos_norm2 = polyline2/np.array([w,h])
+            pos_distance = np.sqrt(np.sum((pos_norm1 - pos_norm2)**2))
+            pos_similarity = 1 / (1 + pos_distance)
+            
+            # Combine shape and position similarities with a new method
+            # This ensures that shape similarity contributes significantly even if positions are different
+            similarity = shape_similarity * ((1 - pos_ratio) + pos_ratio * pos_similarity)
+        else:
+            similarity = shape_similarity
+        
     except ValueError as e:
         print(f"Error in processing: {e}")
         print(f"polyline1 shape: {np.array(polyline1).shape}")
         print(f"polyline2 shape: {np.array(polyline2).shape}")
         return 0  # Return 0 similarity for error cases
     
-    distances = np.sqrt(np.sum((resampled1 - resampled2)**2, axis=1))
-    mean_distance = np.mean(distances)
-    
-    # Convert distance to similarity
-    similarity = 1 / (1 + mean_distance)
-    
     return similarity
+
+def calculate_targetpoly(rpoly, lpoly):
+    targetpoly = []
+    for p1,p2 in zip(rpoly,lpoly):
+        x1,y1 = p1
+        x2,y2 = p2
+        x,y = (x1+x2)/2, (y1+y2)/2
+        targetpoly.append((x,y))
+    return targetpoly

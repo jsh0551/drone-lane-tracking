@@ -2,7 +2,7 @@ import rclpy
 import time
 from rclpy.node import Node
 from std_srvs.srv import SetBool
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Bool
 from geometry_msgs.msg import TwistStamped
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from mavros_msgs.msg import State
@@ -63,6 +63,15 @@ class MainServer(Node):
         return response
 
 
+class FinishNode(Node):
+    def __init__(self):
+        super().__init__('finish_node')
+        self.subscriber_finish = self.create_subscription(
+            Bool, 'vel_data/finish', self.sub_finish, qos_profile)
+        self.finish = False
+
+    def sub_finish(self, data):
+        self.finish = data.data
 
 
 class TakeoffNode(Node):
@@ -134,10 +143,9 @@ class DriveSwitchNode(Node):
         future = self.client.call_async(self.request)
         if future:
             self.get_logger().info('switching..')
-            self.switch = not self.switch
+            self.switch = True
         else:
             self.get_logger().info('switching request fail..')
-
 
 
 class StateListener(Node):
@@ -200,6 +208,7 @@ def main(args=None):
     driveswitch_node = DriveSwitchNode()
     state_listener = StateListener()
     mode_changer = ModeChanger()
+    finish_node = FinishNode()
 
     # state : loiter(0), takeoff(1), land(2), drive(etc)
     while True:
@@ -251,25 +260,11 @@ def main(args=None):
                 while not driveswitch_node.switch:
                     rclpy.spin_once(driveswitch_node)
                 # 3. select rulebase drive mode
-                if main_server.cmd_state == 3:
-                    count = 0
-                    while True:
-                        count += 1
-                        if count >= max_count:
-                            while driveswitch_node.switch:
-                                rclpy.spin_once(driveswitch_node)
-                            break
-                        time.sleep(0.1)
-                # 4. select auto drive mode
-                elif main_server.cmd_state == 4:
-                    count = 0
-                    while count < 1600:
-                        count += 1
-                        time.sleep(0.1)
-                    while driveswitch_node.switch:
-                        rclpy.spin_once(driveswitch_node)
+                if main_server.cmd_state == 3 or main_server.cmd_state == 4:
+                    while not finish_node.finish:
+                        rclpy.spin_once(finish_node)
+                        time.sleep(0.05)
             time.sleep(stablizing_time)
-            count = 0
             while True:
                 mode_changer.send_mode_change_request('AUTO.LOITER')
                 rclpy.spin_once(state_listener)
@@ -277,6 +272,7 @@ def main(args=None):
                     break
 
         main_server.cmd_state = 0
+        main_server.finish = False
 
     # destroy
     main_server.destroy_node()
@@ -286,6 +282,7 @@ def main(args=None):
     driveswitch_node.destroy_node()
     state_listener.destroy_node()
     mode_changer.destroy_node()
+    finish_node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':

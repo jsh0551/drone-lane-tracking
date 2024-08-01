@@ -39,35 +39,14 @@ qos_profile = QoSProfile(
 )
 
 font = cv2.FONT_HERSHEY_SIMPLEX  # 글꼴 스타일
-font_scale = 0.3  # 글꼴 크기
+font_scale = 0.4  # 글꼴 크기
 thickness = 1  # 텍스트 굵기
-
-def calculate_angle(polyline):
-    mi = len(polyline)//2
-    bx,by = polyline[-1]
-    mx,my = polyline[0] # TODO change this in the future
-    theta = np.arctan((mx-bx)/(my-by))
-    return theta
-
-def draw_slope(bgr_img, pitch):
-    '''
-    x : track lane의 중점으로부터의 거리(px)
-    w,h : 이미지 너비,높이(px)
-    alpha : 카메라 기울기 각도. 바닥과 수평시 0도 (radian?)
-    f : 초점거리
-    '''
-    h,w,_ = bgr_img.shape
-    s_points = np.array([(0,h),(w,h),(w/4,h),(w*3/4,h),(0,h*3/4),(w,h*3/4)]).astype(np.int16)
-    cx = w//2
-    cy = h//2 + 240*np.tan(pitch)
-    for tmp_x, tmp_y in s_points:
-        m = (cy-tmp_y) / (cx-tmp_x)
-        uy = int(max(0,cy))
-        ux = int((uy-cy)/m + cx)
-        bgr_img = cv2.line(bgr_img,(tmp_x,tmp_y),(ux,uy),(255,0,255),2)
-    # h/2나 2h/3에서 만나는 점 구하기.
-    return bgr_img
-
+EVENT = 0
+HFOV = 110
+ASPECT_RATIO = 4 / 3
+CAM_TILT = -45
+POS_RATIO = 0.25
+SIMILARITY = [0.75, 0.75, 0.6, 0.6]
 
 class ImageDetector(Node):
     def __init__(self, name):
@@ -80,35 +59,45 @@ class ImageDetector(Node):
             Imu, '/mavros/imu/data', self.get_data, qos_profile)
         self.cv_bridge = CvBridge()
         self.quaternion = Quaternion()
-        self.pitch = np.radians(-30)
-        self.rpoly, self.lpoly = [], []
+        # init
+        self.pitch = np.radians(CAM_TILT)
+        self.yaw = 0.0
+        self.roll = 0.0
+        self.with_position = True if EVENT == 0 else False
+        # self.with_position = False
+        points = [(240 - 80, 360), (240 + 80, 360)]
+        # 
+        cx = 240
+        cy = 180 + 240 * np.tan(self.pitch)
+        tmps = []
+        for p in points:
+            tmp_poly = []
+            x_points = np.array([cx, p[0]])
+            y_points = np.array([cy, p[1]])
+            slope, intercept = np.polyfit(y_points, x_points, 1)
+            y_range = np.linspace(180, 360, 100)
+            x_values = slope * y_range + intercept
+            for x,y in zip(x_values, y_range):
+                tmp_poly.append((x, y))
+            tmps.append(tmp_poly)
+        self.rpoly, self.lpoly = tmps[1] , tmps[0]
         self.targetpoly = []
-        self.lerror, self.rerror = 0.0, 0.0
-        x_coords = np.linspace(180, 360, 100)
-        y_coords = np.ones(100) * 240
-        self.initial_polyline = np.column_stack([x_coords, y_coords]).astype(np.float32)
-        
-        self.tracker = KalmanFilterPolylineTracker(self.initial_polyline)
+        self.pub_data = []
+        self.prev_error = 0.0
+        self.track_width = None
 
-    def tracking(self, detected_polyline, frame):
-        detected_polyline = np.array(detected_polyline)
-        predicted_polyline = np.array(self.tracker.predict())
-        estimated_polyline = np.array(self.tracker.correct(detected_polyline))
-
-        # 감지된 polyline 그리기 (흰색)
-        for point in detected_polyline.astype(int):
-            cv2.circle(frame, tuple(point), 2, (255, 255, 255), -1)
-
-        # 예측된 polyline 그리기 (녹색)
-        for point in predicted_polyline.astype(int):
-            cv2.circle(frame, tuple(point), 2, (0, 255, 0), -1)
-
-        # 보정된 polyline 그리기 (빨간색)
-        for point in estimated_polyline.astype(int):
-            cv2.circle(frame, tuple(point), 2, (0, 0, 255), -1)
-
-        self.initial_polyline = estimated_polyline
-        return frame
+    def draw_slope(self, bgr_img, pitch, roll):
+        h,w,_ = bgr_img.shape
+        s_points = np.array([(0,h),(w,h),(w/4,h),(w*3/4,h),(0,h*3/4),(w,h*3/4)]).astype(np.int16)
+        fov = np.radians(HFOV)
+        cy = h//2 + w/(2*np.tan(fov/2))*np.tan(pitch)
+        cx = w//2
+        for tmp_x, tmp_y in s_points:
+            m = (cy-tmp_y) / (cx-tmp_x)
+            uy = int(max(0,cy))
+            ux = int((uy-cy)/m + cx)
+            bgr_img = cv2.line(bgr_img,(tmp_x,tmp_y),(ux,uy),(255,0,255),2)
+        return bgr_img
 
     def get_data(self, data):
         self.quaternion.x = data.orientation.x
@@ -116,7 +105,9 @@ class ImageDetector(Node):
         self.quaternion.z = data.orientation.z
         self.quaternion.w = data.orientation.w
         roll, pitch, yaw = euler_from_quaternion((self.quaternion.x,self.quaternion.y,self.quaternion.z,self.quaternion.w))
-        self.pitch = -pitch + np.radians(-30)
+        self.pitch = -pitch + np.radians(CAM_TILT)
+        self.yaw = yaw
+        self.roll = roll
 
     def stream_camera(self, bgr_img):
         cv2.imshow("object", bgr_img)
@@ -155,9 +146,10 @@ class ImageDetector(Node):
             pad_x1, pad_y1, pad_x2, pad_y2 = x1, y1, w-x2, h-y2
             upleft_scale = min(pad_x1/(x2-x1), pad_y1/(y2-y1), scale_limit)
             downright_scale = min(pad_x2/(x2-x1), pad_y2/(y2-y1), scale_limit)
-            b[0] = x1 - (x2-x1)*upleft_scale
+            # 1.5 : width comprehension
+            b[0] = max(x1 - (x2-x1)*upleft_scale*1., 0.0)
             b[1] = y1 - (y2-y1)*upleft_scale
-            b[2] = x2 + (x2-x1)*downright_scale
+            b[2] = min(x2 + (x2-x1)*downright_scale*1., float(w-1))
             b[3] = y2 + (y2-y1)*downright_scale
             # if b[0] >= w*side_decision and b[2] <= w*(1-side_decision):
             if b[3] >= h*boundary:
@@ -165,8 +157,13 @@ class ImageDetector(Node):
         return scaled_predictions
     
     def draw_tracklines(self, bgr_img, predictions, landmarksX, landmarksY, points_num = 100):
+        # if no landmarks, return
         if not landmarksX:
-            return bgr_img, []
+            rpoly = self.rpoly
+            lpoly = self.lpoly
+            self.targetpoly = calculate_targetpoly(rpoly, lpoly)
+            return bgr_img, self.targetpoly, rpoly, lpoly
+        # get polylines
         h,w,_ = bgr_img.shape
         polypoints = []
         for pred, landmarkX, landmarkY in zip(predictions, landmarksX, landmarksY):
@@ -174,7 +171,6 @@ class ImageDetector(Node):
             x1,y1,x2,y2 = np.array(b).astype(np.uint16)
             y1 += h//2
             y2 += h//2
-            # draw track line
             if x1 < (h-y2):
                 coefficients = np.polyfit(landmarkX, landmarkY, 2)
                 a, b, c = coefficients
@@ -192,78 +188,88 @@ class ImageDetector(Node):
                 x_fit = a*y_fit**2 + b*y_fit + c
             if abs(a) >0.003:
                 continue
-
-            polypoint = [] # for return
-            polypoint_int = [] # for draw
+            polypoint = []
+            polypoint_int = []
             for x,y in zip(x_fit, y_fit):
                 polypoint.append((x, y))
                 polypoint_int.append((int(x), int(y)))
+            # draw track lines
             cv2.polylines(bgr_img, [np.array(polypoint_int)], isClosed=False, color=(255, 0, 0), thickness=2)
             polypoint = sorted(polypoint, key=lambda x:x[1])
             polypoints.append(polypoint)
-            # draw points
+            # draw landmarks
             for x,y in zip(landmarkX, landmarkY):
                 x,y = int(x), int(y)
                 bgr_img = cv2.line(bgr_img,(x,y),(x,y),(0,0,255),5)
-        # draw target line
+        # calcuate similarlity
         leftpolys, rightpolys = [], []
         similarity_array = []
         for polypoint in polypoints:
             bot_x = polypoint[-1][0]
             if bot_x - w//2 >= 0:
                 if self.rpoly:
-                    sim = calculate_similarity(self.rpoly, polypoint)
+                    sim = calculate_similarity(self.rpoly, polypoint, w, h, with_position=self.with_position, pos_ratio=POS_RATIO)
                     cv2.putText(bgr_img, f'{sim:.4f}', (int(polypoint[0][0]),int(polypoint[0][1])), font, font_scale, (0,0,0), thickness, cv2.LINE_AA)
                     similarity_array.append(sim)
-                    if sim < 0.85:
+                    if sim < SIMILARITY[EVENT]:
                         continue
                 rightpolys.append(polypoint)
             else:
                 if self.lpoly:
-                    sim = calculate_similarity(self.lpoly, polypoint)
+                    sim = calculate_similarity(self.lpoly, polypoint, w, h, with_position=self.with_position, pos_ratio=POS_RATIO)
                     cv2.putText(bgr_img, f'{sim:.4f}', (int(polypoint[0][0]),int(polypoint[0][1])), font, font_scale, (0,0,0), thickness, cv2.LINE_AA)
-                    if sim < 0.85:
+                    if sim < SIMILARITY[EVENT]:
                         continue
                 leftpolys.append(polypoint)
+        # return targetpoly if no similar polyline
         if not rightpolys and not leftpolys:
-            return bgr_img, []
+            rpoly = self.rpoly
+            lpoly = self.lpoly
+            self.targetpoly = calculate_targetpoly(rpoly, lpoly)
+            return bgr_img, self.targetpoly, rpoly, lpoly
+        # select most similar polyline
         if not self.rpoly:
             rightpolys = sorted(rightpolys, key=lambda x:x[-1][0])
         else:
-            rightpolys = sorted(rightpolys, key=lambda x:calculate_similarity(self.rpoly, x), reverse=True)
+            rightpolys = sorted(rightpolys, key=lambda x:calculate_similarity(self.rpoly, x, w, h, with_position=self.with_position, pos_ratio=POS_RATIO), reverse=True)
         if not self.lpoly:
             leftpolys = sorted(leftpolys, key=lambda x:x[-1][0], reverse=True)
         else:
-            leftpolys = sorted(leftpolys, key=lambda x:calculate_similarity(self.lpoly, x), reverse=True)
-        if not rightpolys or not leftpolys:
-            rpoly = self.rpoly
-            lpoly = self.lpoly
-        else:
-            self.rpoly, self.lpoly = rightpolys[0], leftpolys[0]
-            rpoly,lpoly = rightpolys[0], leftpolys[0]
-        # bgr_img = cv2.line(bgr_img,(int(rpoly[-1][0]),int(rpoly[-1][1])),(int(rpoly[-1][0]),int(rpoly[-1][1])),(0,0,0),15)
-        # bgr_img = cv2.line(bgr_img,(int(lpoly[-1][0]),int(lpoly[-1][1])),(int(lpoly[-1][0]),int(lpoly[-1][1])),(0,0,0),15)
-        targetpoly = []
-        # sim_str = "   ".join([f"{sim:.4f}" for sim in similarity_array])
-        # self.get_logger().info(f'similarity : [{sim_str}]')
-        # if rpoly:
-        #     bgr_img = self.tracking(rpoly, bgr_img)
-        for p1,p2 in zip(rpoly,lpoly):
-            x1,y1 = p1
-            x2,y2 = p2
-            x,y = (x1+x2)/2, (y1+y2)/2
-            targetpoly.append((x,y))
+            leftpolys = sorted(leftpolys, key=lambda x:calculate_similarity(self.lpoly, x, w, h, with_position=self.with_position, pos_ratio=POS_RATIO), reverse=True)
+        rpoly = self.rpoly = rightpolys[0] if rightpolys else self.rpoly
+        lpoly = self.lpoly = leftpolys[0] if leftpolys else self.lpoly
+        # caculate targetpoly and draw lines
+        targetpoly = calculate_targetpoly(rpoly, lpoly)
         self.targetpoly = targetpoly
         targetpoly_int = [(int(x),int(y)) for x,y in self.targetpoly]
         bot_point = self.targetpoly[-1]
-        slope = calculate_slope(bot_point, self.pitch, w, h)
+        slope = calculate_slope(bot_point, self.pitch, w, h, fov=HFOV)
         t_targetpoly = affine_transform(np.array(self.targetpoly), slope)
         t_bot_point = t_targetpoly[-1]
         gap = t_bot_point[0] - w//2
         t_targetpoly_int = [(int(x-gap),int(y)) for x,y in t_targetpoly]
         cv2.polylines(bgr_img, [np.array(targetpoly_int)], isClosed=False, color=(0, 255, 255), thickness=2)
         cv2.polylines(bgr_img, [np.array(t_targetpoly_int)], isClosed=False, color=(127, 127, 127), thickness=2)
-        return bgr_img, self.targetpoly
+        # write information on the window
+        bot_point = np.array(targetpoly)[-1]
+        bot_point_r = np.array(rpoly)[-1]
+        bot_point_l = np.array(lpoly)[-1]
+        factor = bot_point_r[0] - bot_point_l[0]
+        error = (bgr_img.shape[1]/2 - bot_point[0])/factor
+        if self.track_width is not None:
+            if abs((self.track_width-factor)/self.track_width) > 0.6 and rightpolys and leftpolys:
+                rightpolys = sorted(rightpolys, key=lambda x:x[0])
+                leftpolys = sorted(leftpolys, key=lambda x:x[0], reverse=True)
+                self.rpoly, self.lpoly = rightpolys[0], leftpolys[0]
+                rpoly,lpoly = rightpolys[0], leftpolys[0]
+        self.track_width = factor
+        self.prev_error = error
+        t_slope = calculate_slope(t_bot_point, self.pitch, w, h, fov=HFOV)
+        theta = np.arctan(1/t_slope)
+        vfov = 2 * np.arctan(np.tan(np.radians(HFOV / 2)) / ASPECT_RATIO)
+        cv2.putText(bgr_img, f'yaw : {np.degrees(self.yaw):.4f}', (20,20), font, font_scale, (122,122,0), thickness, cv2.LINE_AA)
+        cv2.putText(bgr_img, f'prev error : {self.prev_error:.4f}, error : {error:.4f}, slope : {np.degrees((theta + self.roll)/np.tan(vfov/2)):.4f}', (20,40), font, font_scale, (122,122,0), thickness, cv2.LINE_AA)
+        return bgr_img, self.targetpoly, rpoly, lpoly
 
 
     def listener_callback(self, data):
@@ -283,21 +289,36 @@ class ImageDetector(Node):
             bgr_image = cv2.rectangle(bgr_image, (x1,y1),(x2,y2),(0,255,0),2)
             # bgr_image = cv2.line(bgr_image, (130, 0), (130, 480), (0, 0, 255), 5)
             # bgr_image = cv2.line(bgr_image, (420, 0), (420, 480), (0, 0, 255), 5)
-        bgr_image = draw_slope(bgr_image, self.pitch)
-        dotted_image, polypoint = self.draw_tracklines(bgr_image, predictions, landmarksX, landmarksY)
+        bgr_image = self.draw_slope(bgr_image, self.pitch, self.roll)
+        dotted_image, polypoint, rpoly, lpoly = self.draw_tracklines(bgr_image, predictions, landmarksX, landmarksY)
+        rpoly_int, lpoly_int = [(int(x),int(y)) for x,y in rpoly], [(int(x),int(y)) for x,y in lpoly]
+        cv2.polylines(dotted_image, [np.array(rpoly_int)], isClosed=False, color=(127, 0, 0), thickness=1)
+        cv2.polylines(dotted_image, [np.array(lpoly_int)], isClosed=False, color=(127, 0, 0), thickness=1)
         self.stream_camera(dotted_image)
-        self.publish_polypoints(polypoint, h, w)
+        # self.pub_data = [polypoint, rpoly, lpoly, h, w]
+        self.publish_polypoints(polypoint, rpoly, lpoly, h, w)
 
+    def pub_callback(self):
+        if self.pub_data:
+            polypoint, rpoly, lpoly, h, w = self.pub_data
+            self.publish_polypoints(polypoint, rpoly, lpoly, h, w)
 
-    def publish_polypoints(self, polypoint, h, w):
+    def publish_polypoints(self, polypoint, rpoly, lpoly, h, w):
         targetpoly_info = TargetPolyInfo()
-        if polypoint:
-            # print("New Image")
-            point_cloud = PointCloud()
+        if polypoint and rpoly and lpoly:
+            polyline_cloud, rpoly_cloud, lpoly_cloud = PointCloud(), PointCloud(), PointCloud()
             for x_pair, y_pair in polypoint:
                 point = Point32(x=x_pair, y=y_pair)
-                point_cloud.points.append(point)
-            targetpoly_info.clouds = point_cloud
+                polyline_cloud.points.append(point)
+            for x_pair, y_pair in rpoly:
+                point = Point32(x=x_pair, y=y_pair)
+                rpoly_cloud.points.append(point)
+            for x_pair, y_pair in lpoly:
+                point = Point32(x=x_pair, y=y_pair)
+                lpoly_cloud.points.append(point)
+            targetpoly_info.polyline = polyline_cloud
+            targetpoly_info.rpoly = rpoly_cloud
+            targetpoly_info.lpoly = lpoly_cloud
             targetpoly_info.height = int(h)
             targetpoly_info.width = int(w)
         self.pub.publish(targetpoly_info)

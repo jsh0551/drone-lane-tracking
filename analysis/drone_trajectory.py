@@ -9,6 +9,7 @@ DATA_PATH = 'drone_data'
 file_name = 'drone_data(1).csv'
 freq = 10
 HEIGHT, WIDTH = 500, 600
+MAP_SCALE = 0.7
 scale = 2
 
 def get_trackmap(df, h, w, start):
@@ -28,11 +29,11 @@ def draw_track(track_map, df, start):
         tmp_point = (start[0] + i*scale, start[1])
         tmp_point = np.array(tmp_point).astype(np.uint16)
         cv2.line(track_map, (tmp_point[0], tmp_point[1]), (tmp_point[0], tmp_point[1]), color=(0, 255, 0), thickness=3)
-        if i >=120:
+        if i >=int(120*MAP_SCALE):
             break
 
     # r = 350/np.pi
-    r = 105
+    r = int(105*MAP_SCALE)
     cx,cy = tmp_point[0], tmp_point[1]+r
     for angle in range(180):
         dx,dy = np.cos(np.radians(angle)-np.pi/2)*r, np.sin(np.radians(angle)-np.pi/2)*r
@@ -44,7 +45,7 @@ def draw_track(track_map, df, start):
         tmp_point = (next_point[0] - i*scale, next_point[1])
         tmp_point = np.array(tmp_point).astype(np.uint16)
         cv2.line(track_map, (tmp_point[0], tmp_point[1]), (tmp_point[0], tmp_point[1]), color=(0, 255, 0), thickness=3)
-        if i >=120:
+        if i >=int(120*MAP_SCALE):
             break
     
     cx,cy = tmp_point[0], tmp_point[1]-r
@@ -63,9 +64,9 @@ def draw_trajectory(df, start = [150,150]):
         velx, vely = vel
         current_position[0] += (velx / freq)*scale
         current_position[1] += (vely / freq)*scale
-        tmp_point = np.array(current_position).astype(np.uint16)
+        tmp_point = np.array(current_position).astype(np.uint16) + 150 # TODO
         # cv2.circle(track_map, (tmp_point[0], tmp_point[1]), radius=3, color=(0, 0, 255), thickness=-1)
-        cv2.line(track_map, (tmp_point[0], tmp_point[1]), (tmp_point[0], tmp_point[1]), color=(0, 0, 255), thickness=2)
+        cv2.line(track_map, (tmp_point[0]+30, tmp_point[1]), (tmp_point[0]+30, tmp_point[1]), color=(0, 0, 255), thickness=2) # TODO
         frames.append(cv2.flip(track_map, 0))
     return frames, cv2.flip(track_map,0)
 
