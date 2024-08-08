@@ -8,7 +8,7 @@ class CameraNode(Node):
     def __init__(self, camera_name, namespace, device_path):
         super().__init__(camera_name, namespace=namespace)
         self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
-        self.timer_period = 0.033
+        self.timer_period = 1/3
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
         self.bridge = CvBridge()
         self.cap = cv2.VideoCapture(f"v4l2src device={device_path} ! video/x-raw, width=(int)640, height=(int)480, framerate=(fraction)30/1 ! videoconvert ! video/x-raw, format=(string)BGR ! appsink", cv2.CAP_GSTREAMER)

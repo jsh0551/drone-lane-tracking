@@ -330,6 +330,9 @@ class PositionPublisher(Node):
                 self.get_logger().info(f"angle : {np.degrees(self.globalAngle):5f}(deg), angle_flag : {np.degrees(self.currentAngle):5f}(deg), theta : {np.degrees(theta):5f}(deg), dtheta : {np.degrees(dtheta):5f}(deg)")
                 self.get_logger().info("x : {:.2f}(m/s), y : {:.2f}(m/s), omega : {:.2f}(deg/s)".format(self.twist_stamped.twist.linear.x, self.twist_stamped.twist.linear.y, np.degrees(theta)))
                 self.get_logger().info("moved : {:5f}(m), vel : {:5f}(m/s) dvel : {:5f}(m/s)".format(self.moved, velocity, dvel))
+                if self.drone_mode == 'AUTO.LOITER':
+                    self.flag = False
+                    self.moved = 0.0
         elif self.moved > self.distance + 10:
             self.finish.data = True
             self.twist_stamped.twist.linear.x = 0.0

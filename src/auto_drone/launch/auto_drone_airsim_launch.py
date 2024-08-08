@@ -30,11 +30,17 @@ def generate_launch_description():
         executable='control_velocity_node',
         output='screen'
     )
+    node_save_video = Node(
+        package='auto_drone',
+        executable='save_video_node',
+        output='screen'
+    )
 
     return LaunchDescription([
         node_server,
         node_control,
         node_cam1,
         node_cam2,
-        node_detection
+        node_detection,
+        node_save_video
     ])

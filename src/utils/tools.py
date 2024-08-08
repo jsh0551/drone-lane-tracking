@@ -209,3 +209,4 @@ def calculate_targetpoly(rpoly, lpoly):
         x,y = (x1+x2)/2, (y1+y2)/2
         targetpoly.append((x,y))
     return targetpoly
+    

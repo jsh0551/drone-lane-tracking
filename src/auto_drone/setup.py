@@ -35,7 +35,9 @@ setup(
             'takeoff = auto_drone.cmd_takeoff:main',
             'land = auto_drone.cmd_land:main',
             'drive = auto_drone.cmd_drive:main',
-            'drive_auto = auto_drone.cmd_drive_auto:main'
+            'drive_auto = auto_drone.cmd_drive_auto:main',
+            'drive_termination = auto_drone.cmd_drive_termination:main',
+            'save_video_node = auto_drone.node_save_video:main',
         ],
     },
 )
