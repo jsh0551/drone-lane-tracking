@@ -18,9 +18,9 @@ def generate_launch_description():
         name='dual_camera_node',
         output='screen'
     )
-    node_save_video = Node(
+    node_record_video = Node(
         package='auto_drone',
-        executable='save_video_node',
+        executable='record_video_node',
         output='screen'
     )
 
@@ -28,5 +28,5 @@ def generate_launch_description():
         node_server,
         node_vel,
         node_cam,
-        node_save_video
+        node_record_video
     ])

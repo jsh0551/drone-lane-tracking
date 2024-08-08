@@ -36,8 +36,9 @@ setup(
             'land = auto_drone.cmd_land:main',
             'drive = auto_drone.cmd_drive:main',
             'drive_auto = auto_drone.cmd_drive_auto:main',
+            'record = auto_drone.cmd_record:main',
             'drive_termination = auto_drone.cmd_drive_termination:main',
-            'save_video_node = auto_drone.node_save_video:main',
+            'record_video_node = auto_drone.node_record_video:main',
         ],
     },
 )
