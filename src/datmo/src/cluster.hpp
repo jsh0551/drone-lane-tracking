@@ -51,7 +51,7 @@
 
 // #include "datmo/Track.h"
 // #include "datmo_msg/msg/Track.hpp" 
-#include "/root/Work_humble/datmo_ws/build/datmo_msg/rosidl_generator_cpp/datmo_msg/msg/track.hpp"
+#include "datmo_msg/msg/track.hpp"
 
 
 using namespace Eigen;

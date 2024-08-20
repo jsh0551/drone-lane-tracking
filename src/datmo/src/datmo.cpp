@@ -200,7 +200,8 @@ void Datmo::callback(const sensor_msgs::msg::LaserScan::SharedPtr scan_in)
     vector<bool> g_matched(point_clusters.size(),false);   // The Group has been matched with a Cluster
     vector<bool> c_matched(clusters.size(),false); // The Cluster object has been matched with a group
 
-    double euclidean[point_clusters.size()][clusters.size()]; // Matrix object to save the euclidean distances
+    // double euclidean[point_clusters.size()][clusters.size()]; // Matrix object to save the euclidean distances
+    std::vector<std::vector<double>> euclidean(point_clusters.size(), std::vector<double>(clusters.size()));
 
     //Finding mean coordinates of group and associating with cluster Objects
     double mean_x = 0, mean_y = 0;

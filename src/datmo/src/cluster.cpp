@@ -111,7 +111,7 @@ void Cluster::update(const pointList& new_points, const double dt)
 
 void Cluster::populateTrackingMsgs(const double& dt){
   // This function populates the datmo/Tracks msgs.
-
+  (void)dt;
   msg_track_box_kf.id = this->id;
   // msg_track_box_kf.odom.header.stamp = ros::Time::now();
   msg_track_box_kf.odom.header.stamp = rclcpp::Clock().now();
