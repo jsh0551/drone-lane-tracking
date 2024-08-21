@@ -56,7 +56,7 @@ def calculate_slope(bot_point, pitch, width, height, fov=65):
     cy = height/2 + width/(2*np.tan(np.radians(fov)/2))*np.tan(pitch)
     # cal slope
     bx, by = bot_point
-    slope = (cy-by) / (cx-bx)
+    slope = (cy-by) / max(1,(cx-bx))
     return slope
 
 def affine_transform(polyline, slope):

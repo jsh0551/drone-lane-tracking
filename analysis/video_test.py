@@ -80,8 +80,8 @@ def scaling_bbox(predictions, w, h, scale_limit = 0.15, boundary = 0.75):
         _, _, b = item
         x1,y1,x2,y2 = b
         pad_x1, pad_y1, pad_x2, pad_y2 = x1, y1, w-x2, h-y2
-        upleft_scale = min(pad_x1/(x2-x1), pad_y1/(y2-y1), scale_limit)
-        downright_scale = min(pad_x2/(x2-x1), pad_y2/(y2-y1), scale_limit)
+        upleft_scale = min(pad_x1/max(x2-x1,1e-10), pad_y1/max(y2-y1,1e-10), scale_limit)
+        downright_scale = min(pad_x2/max(x2-x1,1e-10), pad_y2/max(y2-y1,1e-10), scale_limit)
         # 1.5 : width comprehension
         b[0] = max(x1 - (x2-x1)*upleft_scale*1., 0.0)
         b[1] = y1 - (y2-y1)*upleft_scale
@@ -97,6 +97,7 @@ def object_localize(np_img, predictions):
         return [],[],[]
     h, w, _ = np_img.shape
     predictions = scaling_bbox(predictions, w, h)
+    predictions = nms(predictions, 0.3)
     np_labels = []
     crop_imgs = []
     crop_coords = []

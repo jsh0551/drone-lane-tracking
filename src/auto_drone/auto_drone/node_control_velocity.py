@@ -111,6 +111,19 @@ class PositionPublisher(Node):
         self.kp_dth, self.ki_dth, self.kd_dth = dtheta_k_matrix[EVENT]
         self.dtheta_pid = PIDController(self.kp_dth, self.ki_dth, self.kd_dth, PERIOD)
 
+    def takeoff_switch(self, request, response):
+        self.takeoff = not self.takeoff
+        self.get_logger().info(f'switch to takeoff : {self.takeoff}')
+        response.success = True
+        if not self.flag:
+            self.get_logger().info(f'wait for takeoff signal..')
+        # initialize
+        self.finish.data = False
+        self.integral = 0
+        self.prev_error = 0
+        self.moved = 0
+        return response
+    
     def drive_switch(self, request, response):
         self.flag = not self.flag
         self.get_logger().info(f'switch to drive : {self.flag}')

@@ -15,12 +15,15 @@ class CameraNode(Node):
 
     def timer_callback(self):
         ret, frame = self.cap.read()
+        t = self.get_clock().now().to_msg().sec
+        nt = self.get_clock().now().to_msg().nanosec/1e6
+
         if ret:
             msg = self.bridge.cv2_to_imgmsg(frame, 'bgr8')
             self.publisher_.publish(msg)
-            self.get_logger().info(f"Publishing video frame from {self.get_name()}")
+            self.get_logger().info(f"Publishing video frame from {self.get_name()}, t = {t}.{nt:.6f}")
         else:
-            self.get_logger().warn(f"Failed to capture video frame from {self.get_name()}")
+            self.get_logger().warn(f"Failed to capture video frame from {self.get_name()}, t = {t}.{nt:.6f}")
 
 def main(args=None):
     rclpy.init(args=args)

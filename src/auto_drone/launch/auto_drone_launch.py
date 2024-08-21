@@ -31,10 +31,17 @@ def generate_launch_description():
         executable='record_video_node',
         output='screen'
     )
+    node_detection_runner = Node(
+        package='auto_drone',
+        executable='runner_detection_node',
+        parameters=[],
+        output='screen'
+    )
     return LaunchDescription([
         node_server,
         node_control,
         node_cam,
         node_detection,
-        node_record_video
+        node_record_video,
+        node_detection_runner
     ])

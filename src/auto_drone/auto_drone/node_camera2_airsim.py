@@ -54,13 +54,15 @@ class ImagePublisher(Node):
         # 이미지 데이터와 각도 데이터 수신
         remaining = data_size + 12  # 이미지 데이터 길이 + float 2개 (pitch, roll)
         received_data = b''
-
         while len(received_data) < remaining:
             packet = self.client_socket.recv(4096)
             if not packet:
                 break
             received_data += packet
 
+        t = self.get_clock().now().to_msg().sec
+        nt = self.get_clock().now().to_msg().nanosec/1e6
+        self.get_logger().info(f't = {t}.{nt:.6f}')
         # 이미지 데이터와 각도 데이터 분리
         img_data = received_data[:data_size]
         if img_data is not None:

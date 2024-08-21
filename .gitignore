@@ -17,3 +17,4 @@ drone_video/*
 drone_video_viz/*
 src/model_linedet/weights_dqll/*.pth
 src/model_linedet/weights_dqll/*.pt
+*.pt

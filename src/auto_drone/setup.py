@@ -32,6 +32,7 @@ setup(
             'airsim_cam1_node = auto_drone.node_camera1_airsim:main',
             'airsim_cam2_node = auto_drone.node_camera2_airsim:main',
             'line_detection_node = auto_drone.node_detection_line:main',
+            'runner_detection_node = auto_drone.node_detection_runner:main',
             'control_direction_node = auto_drone.node_control_direction:main',
             'control_velocity_node = auto_drone.node_control_velocity:main',
             'takeoff = auto_drone.cmd_takeoff:main',

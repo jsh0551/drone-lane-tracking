@@ -20,9 +20,12 @@ class VideoCaptureNode(Node):
         super().__init__('video_capture_node')
         self.subscription = self.create_subscription(
             Image, '/camera1/video_frames', self.image_callback, 10)
+        self.subscription2 = self.create_subscription(
+            Image, '/camera2/video_frames', self.image_callback2, 10)
         self.srv = self.create_service(SetBool, 'video/switch', self.service_callback)
         self.cv_bridge = CvBridge()
         self.video_writer = None
+        self.video_writer2 = None
         self.is_recording = False
         self.switch = False
 
@@ -31,16 +34,23 @@ class VideoCaptureNode(Node):
             cv_image = self.cv_bridge.imgmsg_to_cv2(msg, 'bgr8')
             self.video_writer.write(cv_image)
 
+    def image_callback2(self, msg):
+        if self.is_recording:
+            cv_image = self.cv_bridge.imgmsg_to_cv2(msg, 'bgr8')
+            self.video_writer2.write(cv_image)
+
     def service_callback(self, request, response):
         self.switch = not self.switch
         if self.switch and not self.is_recording:
             current_time = get_current_time_string()
-            self.video_writer = cv2.VideoWriter(f'drone_video/{current_time}.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 1/PERIOD, (WIDTH, HEIGHT))
+            self.video_writer = cv2.VideoWriter(f'drone_video/c1_{current_time}.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 1/PERIOD, (WIDTH, HEIGHT))
+            self.video_writer2 = cv2.VideoWriter(f'drone_video/c2_{current_time}.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 1/PERIOD, (WIDTH, HEIGHT))
             self.is_recording = True
             response.success = True
             self.get_logger().info('Video recording started')
         elif not self.switch and self.is_recording:
             self.video_writer.release()
+            self.video_writer2.release()
             cv2.destroyAllWindows()
             self.is_recording = False
             response.success = True
