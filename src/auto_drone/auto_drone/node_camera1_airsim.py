@@ -62,8 +62,8 @@ class ImagePublisher(Node):
             received_data += packet
 
         t = self.get_clock().now().to_msg().sec
-        nt = self.get_clock().now().to_msg().nanosec/1e6
-        self.get_logger().info(f't = {t}.{nt:.6f}')
+        nt = str(self.get_clock().now().to_msg().nanosec)
+        self.get_logger().info(f't = {t}.{nt[:6]}')
         # 이미지 데이터와 각도 데이터 분리
         img_data = received_data[:data_size]
         if img_data is not None:

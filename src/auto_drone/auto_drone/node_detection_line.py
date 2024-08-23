@@ -49,7 +49,7 @@ ASPECT_RATIO = 4 / 3
 CAM_TILT = -45
 POS_RATIO = 0.25
 SIMILARITY_LIMIT = [0.75, 0.75, 0.6, 0.6]
-VIZ = False
+VIZ = True
 
 class VizCamera:
     def __init__(self):

@@ -17,6 +17,7 @@ from mavros_msgs.srv import (
     SetMode,
     CommandLong
 )
+
 TIMER = True
 PERIOD = 0.05
 WIDTH, HEIGHT = 480, 360
@@ -36,6 +37,12 @@ def get_current_time_string():
     now = datetime.datetime.now()
     time_str = now.strftime('%Y-%m-%d-%H%M%S')
     return time_str
+
+def send_switch_signal(switch_node, signal):
+    while True:
+        rclpy.spin_once(switch_node)
+        if switch_node.switch == signal:
+            break
 
 class MainServer(Node):
     def __init__(self):
@@ -148,10 +155,48 @@ class LandNode(Node):
             self.get_logger().info('landing request fail..')       
 
 
+class ArmingSwitchNode(Node):
+    def __init__(self):
+        super().__init__('armswitch_node')                                                             
+        self.client = self.create_client(SetBool, 'vel_data/arming_switch')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('arm switch node : service not available, waiting again...')
+        self.request = SetBool.Request()
+        self.timer = self.create_timer(0.1, self.send_request)
+        self.switch = False
+
+    def send_request(self):
+        future = self.client.call_async(self.request)
+        if future:
+            self.get_logger().info('switching..')
+            self.switch = not self.switch
+        else:
+            self.get_logger().info('switching request fail..')
+
+
+class DrivePreparationSwitch(Node):
+    def __init__(self):
+        super().__init__('driveprepswitch_node')                                                             
+        self.client = self.create_client(SetBool, 'vel_data/preparation_switch')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('drive preparation switch node : service not available, waiting again...')
+        self.request = SetBool.Request()
+        self.timer = self.create_timer(0.1, self.send_request)
+        self.switch = False
+
+    def send_request(self):
+        future = self.client.call_async(self.request)
+        if future:
+            self.get_logger().info('switching..')
+            self.switch = not self.switch
+        else:
+            self.get_logger().info('switching request fail..')
+
+
 class DriveSwitchNode(Node):
     def __init__(self):
         super().__init__('driveswitch_node')                                                             
-        self.client = self.create_client(SetBool, 'vel_data/switch')
+        self.client = self.create_client(SetBool, 'vel_data/drive_switch')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('drive switch node : service not available, waiting again...')
         self.request = SetBool.Request()
@@ -162,7 +207,7 @@ class DriveSwitchNode(Node):
         future = self.client.call_async(self.request)
         if future:
             self.get_logger().info('switching..')
-            self.switch = True
+            self.switch = not self.switch
         else:
             self.get_logger().info('switching request fail..')
 
@@ -243,11 +288,14 @@ def main(args=None):
     takeoff_node = TakeoffNode()
     arm_node = ArmNode()
     land_node = LandNode()
+    armswitch_node = ArmingSwitchNode()
+    driveprepswitch_node = DrivePreparationSwitch()
     driveswitch_node = DriveSwitchNode()
     videoswitch_node = VideoSwitchNode()
     state_listener = StateListener()
     mode_changer = ModeChanger()
     finish_node = FinishNode()
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     os.makedirs('drone_video', exist_ok=True)
     # state : loiter(0), takeoff(1), land(2), drive(etc)
@@ -265,9 +313,17 @@ def main(args=None):
                 arm_node.arming = True
                 rclpy.spin_once(arm_node)
                 rclpy.spin_once(state_listener)
-            mode_changer.send_mode_change_request('AUTO.LOITER') # TODO : 높이 조절. takeoff node에서 바로 높이 명령 줄 수 있는지도 확인
-            takeoff_node.get_logger().info('takeoff stablizing..')
+            send_switch_signal(armswitch_node, True)
+            time.sleep(3)
+            mode_changer.send_mode_change_request('OFFBOARD')
+            mode_changer.get_logger().info('takeoff stablizing..')
             time.sleep(stablizing_time)
+            rclpy.spin_once(state_listener)
+            # if loiter mode or no velocity topic, not switching to drive mode
+            if state_listener.msg_mode == 'AUTO.LOITER':
+                mode_changer.get_logger().warn(f'no velocity topic!')
+                main_server.cmd_state = 0
+                continue
             takeoff_node.get_logger().info('takeoff done!\n')
         # 2. land
         elif main_server.cmd_state == 2:
@@ -281,62 +337,69 @@ def main(args=None):
             land_node.get_logger().info('landing stablizing..')
             time.sleep(stablizing_time)
             mode_changer.send_mode_change_request('AUTO.LOITER')
+            send_switch_signal(armswitch_node, False)
             land_node.get_logger().info('landing done!\n')
         # etc. drive
         else:
-            mode_changer.send_mode_change_request('OFFBOARD')
-            mode_changer.get_logger().info('wait for state response..')
-            time.sleep(mode_response_time)
             rclpy.spin_once(state_listener)
             # if loiter mode or no velocity topic, not switching to drive mode
             if state_listener.msg_mode == 'AUTO.LOITER':
                 mode_changer.send_mode_change_request('OFFBOARD')
-                mode_changer.get_logger().warn(f'no velocity topic!')
-            elif not state_listener.msg_armed:
+                time.sleep(mode_response_time)
+                if state_listener.msg_mode == 'AUTO.LOITER':
+                    mode_changer.get_logger().warn(f'no velocity topic!')
+                    main_server.cmd_state = 0
+                    continue
+            if not state_listener.msg_armed:
                 state_listener.get_logger().warn(f'not armed!')
+                main_server.cmd_state = 0
+                continue
             # TODO : adjust zero point and do drive
-            else:
-                time.sleep(2)
-                while not driveswitch_node.switch:
-                    rclpy.spin_once(driveswitch_node)
-                # 3. select rulebase drive mode
-                if main_server.cmd_state == 3:
-                    while not videoswitch_node.switch:
-                        rclpy.spin_once(videoswitch_node)
-                    current_time = get_current_time_string()
-                    while not finish_node.finish:
-                        rclpy.spin_once(finish_node)
-                        rclpy.spin_once(main_server)
-                        time.sleep(PERIOD)
-                        if main_server.cmd_state == -1:
-                            while videoswitch_node.switch:
-                                rclpy.spin_once(videoswitch_node)
-                            break
-                elif main_server.cmd_state == 4:
-                    while not finish_node.finish:
-                        rclpy.spin_once(finish_node)
-                        rclpy.spin_once(main_server)
-                        time.sleep(PERIOD)
-                        if main_server.cmd_state == -1:
-                            break
+            send_switch_signal(driveprepswitch_node, True)
+            time.sleep(stablizing_time)
+            # 3. select rulebase drive mode. record video
+            if main_server.cmd_state == 3:
+                # switch to drive mode
+                send_switch_signal(videoswitch_node, True)
+                send_switch_signal(driveswitch_node, True)
+                # drive
+                while not finish_node.finish:
+                    rclpy.spin_once(finish_node)
+                    rclpy.spin_once(main_server)
+                    time.sleep(PERIOD)
+                    if main_server.cmd_state == -1:
+                        break
+                # turn off switch
+                send_switch_signal(videoswitch_node, False)
+                send_switch_signal(driveswitch_node, False)
+            # 4. select drive mode. not record video
+            elif main_server.cmd_state == 4:
+                # switch to drive mode
+                send_switch_signal(driveswitch_node, True)
+                # drive
+                while not finish_node.finish:
+                    rclpy.spin_once(finish_node)
+                    rclpy.spin_once(main_server)
+                    time.sleep(PERIOD)
+                    if main_server.cmd_state == -1:
+                        break
+                # turn off switch
+                send_switch_signal(driveswitch_node, False)
             if main_server.cmd_state >= 0:
                 time.sleep(stablizing_time)
             else:
                 time.sleep(termination_time)
-            while True:
-                mode_changer.send_mode_change_request('AUTO.LOITER')
-                rclpy.spin_once(state_listener)
-                if state_listener.msg_mode == 'AUTO.LOITER':
-                    break
 
         main_server.cmd_state = 0
-        main_server.finish = False
+
 
     # destroy
     main_server.destroy_node()
     takeoff_node.destroy_node()
     arm_node.destroy_node()
     land_node.destroy_node()
+    armswitch_node.destroy_node()
+    driveprepswitch_node.destroy_node()
     driveswitch_node.destroy_node()
     videoswitch_node.destroy_node()
     state_listener.destroy_node()

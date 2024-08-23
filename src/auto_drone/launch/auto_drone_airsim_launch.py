@@ -49,5 +49,5 @@ def generate_launch_description():
         node_cam2,
         node_detection,
         node_record_video,
-        node_detection_runner
+        # node_detection_runner
     ])
