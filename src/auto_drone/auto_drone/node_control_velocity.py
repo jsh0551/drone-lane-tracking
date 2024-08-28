@@ -74,7 +74,7 @@ class DroneStateCollector(Node):
         self.moved = 0.0
         self.numPoly = 0.
         self.polySlope = 0.0
-        self.ox, self.oy, self.oz = 0.0, 0.0, 0.0
+        self.ox, self.oy, self.oz, self.oyaw = 0.0, 0.0, 0.0, 0.0
 
 
     def get_altitude(self, msg):
@@ -302,28 +302,26 @@ class PositionPublisher(Node):
     def timer_callback(self):
         # 0. unarmed
         if not self.arm_flag and not self.prep_flag and not self.flag:
-            self.local_pos.header.stamp = self.get_clock().now().to_msg()
-            self.local_pos.header.frame_id = ''
-            gap = self.local_alt - self.altitude
-            self.local_pos.pose.position.x = self.x
-            self.local_pos.pose.position.y = self.y
-            self.local_pos.pose.position.z = gap + 2.5
-            # qx,qy,qz,qw = calculate_quaternion(self.yaw, 0.0, 0.0)
-            qx,qy,qz,qw = quaternion_from_euler(0, 0, self.yaw)
-            self.local_pos.pose.orientation.x = qx
-            self.local_pos.pose.orientation.y = qy
-            self.local_pos.pose.orientation.z = qz
-            self.local_pos.pose.orientation.w = qw
-            # self.pos_publisher.publish(self.local_pos)
+            self.ox = self.x 
+            self.oy = self.y
+            self.oz = 2.5
+            self.oyaw = self.yaw
         # 1. armed. hovering
         elif self.arm_flag and not self.prep_flag and not self.flag:
+            self.twist_stamped.twist.linear.x = (self.ox - self.x)/4
+            self.twist_stamped.twist.linear.y = (self.oy - self.y)/4
+            self.twist_stamped.twist.linear.z = (self.oz - self.altitude)/10
+            self.twist_stamped.twist.angular.x = 0.0
+            self.twist_stamped.twist.angular.y = 0.0
+            self.twist_stamped.twist.angular.z = (self.oyaw - self.yaw)/4
             self.globalAngle = self.yaw
             self.currentAngle = self.yaw - np.radians(ROT_OFFSET) # TODO
             self.accumulatedError = DEFAULT[EVENT]
             self.prev_error = 0.0
             self.currentTrack = 0.0
             self.finish.data = False
-            self.pos_publisher.publish(self.local_pos)
+            self.get_logger().info(f'dx : {self.ox - self.x:6f}, dy : {self.oy - self.y:6f}, dz : {self.oz - self.altitude:6f}, dyaw : {self.oyaw - self.yaw:6f}')
+            self.publisher.publish(self.twist_stamped)
         # 2. prepare to drive
         elif self.arm_flag and self.prep_flag and not self.flag:
             if self.numPoly:
