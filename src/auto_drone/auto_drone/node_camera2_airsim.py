@@ -5,7 +5,6 @@
 import rclpy                        # ROS2 Python接口库
 from rclpy.node import Node         # ROS2 节点类
 from sensor_msgs.msg import Image   # 图像消息类型
-from custom_msgs.msg import ImageWithInfo
 from cv_bridge import CvBridge      # ROS与OpenCV图像转换类
 import cv2                          # Opencv图像处理库
 import socket

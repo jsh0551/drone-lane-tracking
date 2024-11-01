@@ -6,7 +6,7 @@ from std_srvs.srv import SetBool
 class RecordClient(Node):
     def __init__(self):
         super().__init__('record_client')
-        self.client = self.create_client(SetBool, 'video/switch')
+        self.client = self.create_client(SetBool, '/video/switch')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('takeoff service not available')
         self.req = SetBool.Request()

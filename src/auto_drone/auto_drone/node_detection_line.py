@@ -4,11 +4,11 @@
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, PointCloud, ChannelFloat32, Imu
+from sensor_msgs.msg import Image, PointCloud, Imu
 from geometry_msgs.msg import Point32, Quaternion
 # from custom_msgs.msg import ImageWithInfo
 import cv2
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge
 import numpy as np
 import sys
 import math
@@ -18,38 +18,34 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 from tf_transformations import euler_from_quaternion
 BASE = os.getcwd()
 
+sys.path.append(os.path.join(BASE))
 sys.path.append(os.path.join(BASE, "src"))
 sys.path.append(os.path.join(BASE, "src", "model_linedet"))
 sys.path.append(os.path.join(BASE, "src", "model_linedet", "model_yolox"))
-sys.path.append(os.path.join(BASE, "src","utils"))
 from tools import *
+from config import cfg
 import DQLL
 from models.yolox import Detector
 from yolox_config import opt
 
-from custom_message.msg import LandmarkCloud, TargetPolyInfo
+from custom_message.msg import TargetPolyInfo
 
 det_model = Detector(opt)
 loc_model = DQLL.localizator()
-qos_profile = QoSProfile(
-    reliability=ReliabilityPolicy.BEST_EFFORT,
-    durability=DurabilityPolicy.VOLATILE,
-    history=HistoryPolicy.KEEP_LAST,
-    depth=1
-)
 
-font = cv2.FONT_HERSHEY_SIMPLEX  # 글꼴 스타일
-font_scale = 0.4  # 글꼴 크기
-thickness = 1  # 텍스트 굵기
-EVENT = 0
-HFOV = 110
-WIDTH = 480
-HEIGHT = 360
-ASPECT_RATIO = 4 / 3
-CAM_TILT = -45
-POS_RATIO = 0.25
-SIMILARITY_LIMIT = [0.75, 0.75, 0.6, 0.6]
-VIZ = True
+VIZ = cfg.SETTING.VIZ_FRONT
+POS_RATIO = cfg.DETECT.POS_RATIO
+SIMILARITY_LIMIT = cfg.DETECT.SIMILARITY_LIMIT
+EVENT = cfg.CONTROL.EVENT
+HFOV = cfg.HFOV
+ASPECT_RATIO = cfg.ASPECT_RATIO
+CAM_TILT = cfg.CAM_TILT
+WIDTH = cfg.WIDTH
+HEIGHT = cfg.HEIGHT
+qos_profile = cfg.qos_profile
+font = cfg.font
+font_scale = cfg.font_scale
+thickness = cfg.thickness
 
 class VizCamera:
     def __init__(self):

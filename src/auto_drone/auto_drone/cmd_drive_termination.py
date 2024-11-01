@@ -5,7 +5,7 @@ from std_srvs.srv import SetBool
 class TerminationClient(Node):
     def __init__(self):
         super().__init__('drive_terminatoin')
-        self.client = self.create_client(SetBool, 'server/drive_termination')
+        self.client = self.create_client(SetBool, '/server/drive_termination')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('drive service not available')
         self.req = SetBool.Request()

@@ -23,13 +23,11 @@ class PIDController():
         self.previous_error = 0
         self.integral = 0
 
-def calculate_angle(polyline, pitch, vfov):
-    mi = len(polyline)//2
+def calculate_angle(polyline, pitch, vfov, airsim=False):
     bx,by = polyline[-1]
-    mx,my = polyline[0] # TODO change this in the future
+    mx,my = polyline[0]
     dx = mx -bx
     dy = my - by
-    dy /= 1/np.tan(pitch) - 1/np.tan(pitch + vfov/2) 
     theta = np.arctan(dx/dy)
     return theta
 
@@ -53,10 +51,13 @@ def calculate_curvature(a, b, c, x):
 def calculate_slope(bot_point, pitch, width, height, fov=65):
     # principle point
     cx = width/2
-    cy = height/2 + width/(2*np.tan(np.radians(fov)/2))*np.tan(pitch)
+    cy = height/2 + (width/2)*np.tan(pitch)
     # cal slope
     bx, by = bot_point
-    slope = (cy-by) / max(1,(cx-bx))
+    if cx == bx:
+        slope = (cy - by) / 0.0001
+    else:
+        slope = (cy-by) / (cx-bx)
     return slope
 
 def affine_transform(polyline, slope):

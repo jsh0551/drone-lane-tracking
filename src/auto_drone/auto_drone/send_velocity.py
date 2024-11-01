@@ -2,7 +2,6 @@ from geometry_msgs.msg import TwistStamped, PoseStamped, Quaternion
 from mavros_msgs.msg import Altitude, State
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Bool
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 import rclpy
 from rclpy.node import Node
 from std_srvs.srv import SetBool
@@ -11,19 +10,14 @@ import os
 import sys
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
 BASE = os.getcwd()
-sys.path.append(os.path.join(BASE, "src","utils"))
+sys.path.append(os.path.join(BASE))
 from tools import *
+from config import cfg
 
-
-count = 40
-vel = 1.0
-period = 0.1
-qos_profile = QoSProfile(
-reliability=ReliabilityPolicy.BEST_EFFORT,
-durability=DurabilityPolicy.VOLATILE,
-history=HistoryPolicy.KEEP_LAST,
-depth=1
-)
+period = cfg.CONTROL.PERIOD
+count = cfg.CONTROL.STEP
+vel = cfg.CONTROL.VELOCITY_RULE
+qos_profile = cfg.qos_profile
 
 
 class PositionPublisher(Node):

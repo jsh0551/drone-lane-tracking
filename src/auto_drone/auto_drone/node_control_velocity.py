@@ -2,50 +2,51 @@ import rclpy
 import sys
 import os
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from std_srvs.srv import SetBool
 
 import pandas as pd
 import numpy as np
 
 from std_msgs.msg import Bool
-from mavros_msgs.msg import Altitude, State
+from mavros_msgs.msg import Altitude
 from geometry_msgs.msg import TwistStamped, PoseStamped, Quaternion
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, Range
 from custom_message.msg import TargetPolyInfo
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
 from std_msgs.msg import Float64MultiArray
 from rclpy.executors import MultiThreadedExecutor
-
 BASE = os.getcwd()
-sys.path.append(os.path.join(BASE, "src","utils"))
+sys.path.append(os.path.join(BASE))
 from tools import *
+from config import cfg
 
-qos_profile = QoSProfile(
-    reliability=ReliabilityPolicy.BEST_EFFORT,
-    durability=DurabilityPolicy.VOLATILE,
-    history=HistoryPolicy.KEEP_LAST,
-    depth=10
-)
-PERIOD = 0.05
-DEFAULT = [0.0, 0.0, -0.1, -0.1]
-ROT_OFFSET = 10
-TRACK_R = [37.898, 39.118, 40.338, 41.5,58, 42.778, 43.998, 45.218, 46.438]
-TRACK_ANGLE = [0.0, 10.29766794, 20.85159044, 30.77199376, 40.11425805, 48.92749134, 57.25539304, 65.13697863]
-TRACK_DISTANCE = [100, 200, 400, 800]
-DRONE_NUM = 5
-RUNNER_NUM = 0
-EVENT = 0 # 0: 100m, 1:200m, 2:400m, 3: over 400m
-HFOV = 110
-ASPECT_RATIO = 4 / 3
-CAM_TILT = -45.0
+AIRSIM = cfg.SETTING.AIRSIM
+PERIOD = cfg.CONTROL.PERIOD
+ROT_OFFSET = cfg.CONTROL.ROT_OFFSET
+DRONE_NUM = cfg.CONTROL.DRONE_NUM
+RUNNER_NUM = cfg.CONTROL.RUNNER_NUM
+EVENT = cfg.CONTROL.EVENT
+ORIGIN = cfg.CONTROL.ORIGIN
+DVEL_LIMIT = cfg.CALIBRATION.DVEL_LIMIT
+THETA_LIMIT = cfg.CALIBRATION.THETA_LIMIT
+TRACK_R = cfg.TRACK_R
+TRACK_ANGLE = cfg.TRACK_ANGLE
+TRACK_DISTANCE = cfg.TRACK_DISTANCE
+HFOV = cfg.HFOV
+ASPECT_RATIO = cfg.ASPECT_RATIO
+CAM_TILT = cfg.CAM_TILT
+qos_profile = cfg.qos_profile
 
 class DroneStateCollector(Node):
     def __init__(self):
         super().__init__('statecollector')
         # Subscribing position info
-        self.subscriber_state = self.create_subscription(
+        if AIRSIM == True:
+            self.subscriber_state = self.create_subscription(
             Altitude, '/mavros/altitude', self.get_altitude, qos_profile)
+        else:
+            self.subscriber_state = self.create_subscription(
+                Range, '/mavros/tfmini_plus', self.get_altitude, qos_profile)
         self.subscriber_position = self.create_subscription(
             PoseStamped, '/mavros/local_position/pose', self.get_position, qos_profile)
         self.subscriber_vel = self.create_subscription(
@@ -56,17 +57,17 @@ class DroneStateCollector(Node):
         self.subscriber_targetpoly = self.create_subscription(
             TargetPolyInfo, '/targetpoly_info', self.get_targetpoly, 10)
         
-        self.collector_publisher = self.create_publisher(Float64MultiArray, 'vel_data/collected', 10)
+        self.collector_publisher = self.create_publisher(Float64MultiArray, '/vel_data/collected', 10)
 
         self.quaternion = Quaternion()
         self.collected = Float64MultiArray()
         self.vfov = 2 * np.arctan(np.tan(np.radians(HFOV / 2)) / ASPECT_RATIO)
         # init value
         self.roll, self.pitch, self.yaw = 0.0, np.radians(CAM_TILT), 0.0
-        self.altitude, self.local_alt = 2.5, 2.5
+        self.altitude = 2.5
         self.x, self.y, self.z = 0.0, 0.0, 0.0
         self.error = 0.0
-        self.accumulatedError = DEFAULT[EVENT]
+        self.accumulatedError = ORIGIN[EVENT]
         self.currentTrack = 0.
         self.targetpoly = []
         self.lidarinfo = []
@@ -78,8 +79,10 @@ class DroneStateCollector(Node):
 
 
     def get_altitude(self, msg):
-        self.altitude = msg.relative
-        self.local_alt = msg.local
+        if AIRSIM == True:
+            self.altitude = msg.relative
+        else:
+            self.altitude = msg.range
 
     def get_position(self, msg):
         self.x = msg.pose.position.x
@@ -88,8 +91,8 @@ class DroneStateCollector(Node):
 
     def get_velocity(self, msg):
         x = msg.twist.linear.x 
-        y = msg.twist.linear.y 
-        self.moved += np.sqrt(x**2 + y**2)/4
+        y = msg.twist.linear.y
+        self.velocity = np.sqrt(x**2 + y**2)
 
     def get_data(self, data):
         self.quaternion.x = data.orientation.x
@@ -129,7 +132,7 @@ class DroneStateCollector(Node):
             # change track number if meet some conditions
             prev_gap = 1 - (0.5 + prev_error) if prev_error >= 0 else (0.5 + prev_error)
             h_gap = 1 - (0.5 + self.error) if self.error >= 0 else (0.5 + self.error)
-            if (prev_error*self.error < 0) and (abs(self.error - prev_error) > 0.3) and ((prev_gap < 0.25) or (h_gap < 0.25) or True):
+            if (prev_error*self.error < 0) and (abs(self.error - prev_error) > 0.3) and ((prev_gap < 0.1) or (h_gap < 0.1) or True):
                 if self.error < prev_error:
                     self.currentTrack += 1.0
                     self.accumulatedError += 1.
@@ -137,9 +140,9 @@ class DroneStateCollector(Node):
                     self.currentTrack -= 1.0
                     self.accumulatedError += -1.
                 if self.currentTrack == 0:
-                    self.accumulatedError = DEFAULT[EVENT]
-            self.get_logger().info(f'--prev_gap : {prev_gap}, h_gap : {h_gap}')
-            self.get_logger().info(f'--prev_error : {prev_error:5f}, error : {self.error:5f}, integrated error : {self.accumulatedError:5f}')
+                    self.accumulatedError = ORIGIN[EVENT]
+            # self.get_logger().info(f'--prev_gap : {prev_gap}, h_gap : {h_gap}')
+            # self.get_logger().info(f'--prev_error : {prev_error:5f}, error : {self.error:5f}, integrated error : {self.accumulatedError:5f}')
             self.get_logger().info(f'--total error : {self.accumulatedError + self.error:5f}, track num : {self.currentTrack}')
             slope = calculate_slope(bot_point, self.pitch, self.width, self.height, fov=HFOV)
             self.targetpoly = affine_transform(targetpoly, slope)
@@ -149,8 +152,8 @@ class DroneStateCollector(Node):
         # altitude, local_alt, x, y, z,
         # error, accumError, curTrack, theta
         # velocity, moved, numPoly
-        data = [self.roll, self.pitch, self.yaw, self.altitude, self.local_alt, self.x, self.y, self.z,\
-                          self.error, self.accumulatedError, self.currentTrack, self.polySlope, self.velocity, self.moved, self.numPoly]
+        data = [self.roll, self.pitch, self.yaw, self.altitude, self.x, self.y, self.z,\
+                          self.error, self.accumulatedError, self.currentTrack, self.polySlope, self.velocity, self.numPoly]
         data = np.array(data).astype(np.float64)
         self.collected.data = list(data)
         self.collector_publisher.publish(self.collected)
@@ -161,14 +164,15 @@ class PositionPublisher(Node):
     def __init__(self):
         super().__init__('node_velocity_control')
         # command to pixhawk
-        self.arm_service = self.create_service(SetBool, 'vel_data/arming_switch', self.arm_switch)
-        self.prep_service = self.create_service(SetBool, 'vel_data/preparation_switch', self.driveprep_switch)
-        self.service = self.create_service(SetBool, 'vel_data/drive_switch', self.drive_switch)
+        self.arm_service = self.create_service(SetBool, '/vel_data/arming_switch', self.arm_switch)
+        self.prep_service = self.create_service(SetBool, '/vel_data/preparation_switch', self.driveprep_switch)
+        self.service = self.create_service(SetBool, '/vel_data/drive_switch', self.drive_switch)
         self.publisher = self.create_publisher(TwistStamped, '/mavros/setpoint_velocity/cmd_vel', 10)
         self.pos_publisher = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 10)
-        self.finish_publisher = self.create_publisher(Bool, 'vel_data/finish', 10)
+        self.finish_publisher = self.create_publisher(Bool, '/vel_data/finish', 10)
         self.timer = self.create_timer(PERIOD, self.timer_callback)
-        self.collected_subscription = self.create_subscription(Float64MultiArray, 'vel_data/collected', self.get_collected, 10)
+        self.collected_subscription = self.create_subscription(Float64MultiArray, '/vel_data/collected', self.get_collected, 10)
+        self.runner_subscription = self.create_subscription(Float64MultiArray, '/vel_data/runner_position', self.get_runner_pos, 10)
         # topic message
         self.twist_stamped = TwistStamped()
         self.local_pos = PoseStamped()
@@ -179,13 +183,13 @@ class PositionPublisher(Node):
         self.flag = False
         self.prep_flag = False
         self.arm_flag = False
-        self.altitude, self.local_alt = 2.5, 2.5
+        self.altitude = cfg.CONTROL.ALTITUDE
         self.x, self.y, self.z = 0.0, 0.0, 0.0
         self.globalAngle = 0.0 ## TODO get from current drone quaternion
         self.currentAngle = np.radians(ROT_OFFSET) + np.radians(TRACK_ANGLE[RUNNER_NUM]) # TODO
         self.theta = 0.0
         self.error = 0.0
-        self.accumulatedError = DEFAULT[EVENT]
+        self.accumulatedError = ORIGIN[EVENT]
         self.currentTrack = 0
         self.targetpoly = []
         self.lidarinfo = []
@@ -200,32 +204,29 @@ class PositionPublisher(Node):
         # theta coefficient
         self.vfov = 2 * np.arctan(np.tan(np.radians(HFOV / 2)) / ASPECT_RATIO)
         self.distance = TRACK_DISTANCE[EVENT]
+        self.oalt = None
+        self.runner_pos = 0.5
+        self.runner_dx = 0.0
 
         # Ziegler-Nichols
         # PID Controller
         self.prev_error = 0
-
-        dvel_k_matrix = [[0.9, 0.005, 0.005], # 100m
-                         [0.9, 0.005, 0.005], # 200m
-                         [0,0,0], # 400m
-                         [1.2, 0.2, 0.1]] # over 400m
-        
-        dtheta_k_matrix = [[0.03, 0.0001, 0.0001], # 100m
-                         [0.015, 0.0005, 0.0005], # 200m
-                         [0,0,0], # 400m
-                         [0.02, 0.0001, 0.0001]] # over 400m
+        dvel_k_matrix = cfg.dvel_k_matrix
+        dtheta_k_matrix = cfg.dtheta_k_matrix
 
         self.kp_dv, self.ki_dv, self.kd_dv = dvel_k_matrix[EVENT]
         self.dvel_pid = PIDController(self.kp_dv, self.ki_dv, self.kd_dv, PERIOD)
 
         self.kp_dth, self.ki_dth, self.kd_dth = dtheta_k_matrix[EVENT]
         self.dtheta_pid = PIDController(self.kp_dth, self.ki_dth, self.kd_dth, PERIOD)
+        
+        self.runner_pid = PIDController(0.09, 0.0001, 0.0001, PERIOD)
 
     def arm_switch(self, request, response):
-        self.arm_flag = not self.arm_flag
+        self.arm_flag = request.data
         self.get_logger().info(f'switch to drive preparation : {self.prep_flag}')
         response.success = True
-        if not self.flag:
+        if not self.arm_flag:
             self.get_logger().info(f'wait for takeoff signal..')
         # initialize
         self.finish.data = False
@@ -234,10 +235,10 @@ class PositionPublisher(Node):
         return response
     
     def driveprep_switch(self, request, response):
-        self.prep_flag = not self.prep_flag
+        self.prep_flag = request.data
         self.get_logger().info(f'switch to drive preparation : {self.prep_flag}')
         response.success = True
-        if not self.flag:
+        if not self.prep_flag:
             self.get_logger().warning(f'wait for preparation signal..')
         # initialize
         self.finish.data = False
@@ -246,7 +247,7 @@ class PositionPublisher(Node):
         return response
     
     def drive_switch(self, request, response):
-        self.flag = not self.flag
+        self.flag = request.data
         self.get_logger().info(f'switch to drive : {self.flag}')
         response.success = True
         if not self.flag:
@@ -258,9 +259,16 @@ class PositionPublisher(Node):
         return response
 
     def get_collected(self, msg):
-        self.roll, self.pitch, self.yaw, self.altitude, self.local_alt, self.x, self.y, self.z,\
-                          self.error, self.accumulatedError, self.currentTrack, self.polySlope, self.velocity, self.moved, self.numPoly = msg.data
-        self.get_logger().info(f'Processed and published velocity')
+        self.roll, self.pitch, self.yaw, self.altitude, self.x, self.y, self.z,\
+                          self.error, self.accumulatedError, self.currentTrack, self.polySlope, _, self.numPoly = msg.data
+        # self.get_logger().info(f'Processed and published velocity')
+
+    def get_runner_pos(self, msg):
+        runner_pos_list = msg.data
+        if len(runner_pos_list)> 0:
+            self.runner_pos = runner_pos_list[0]
+        # self.get_logger().info(f'----------------------------------data : {msg.data[0]}')
+        self.runner_dx = self.runner_pos - 0.5
 
 
     def save_droneInfo(self):
@@ -270,7 +278,7 @@ class PositionPublisher(Node):
                 self.drone_data['y'] = [self.y]
                 self.drone_data['z'] = [self.z]      
                 self.drone_data['roll'] = [self.roll]
-                self.drone_data['pitch'] = [self.pitch + np.radians(30)]
+                self.drone_data['pitch'] = [self.pitch - np.radians(CAM_TILT)]
                 self.drone_data['yaw'] = [self.yaw]
                 self.drone_data['velx'] = [self.twist_stamped.twist.linear.x]
                 self.drone_data['vely'] = [self.twist_stamped.twist.linear.y]
@@ -282,7 +290,7 @@ class PositionPublisher(Node):
                 self.drone_data['y'].append(self.y)
                 self.drone_data['z'].append(self.z)      
                 self.drone_data['roll'].append(self.roll)
-                self.drone_data['pitch'].append(self.pitch + np.radians(30))
+                self.drone_data['pitch'].append(self.pitch - np.radians(CAM_TILT))
                 self.drone_data['yaw'].append(self.yaw)
                 self.drone_data['velx'].append(self.twist_stamped.twist.linear.x)
                 self.drone_data['vely'].append(self.twist_stamped.twist.linear.y)
@@ -304,55 +312,60 @@ class PositionPublisher(Node):
         if not self.arm_flag and not self.prep_flag and not self.flag:
             self.ox = self.x 
             self.oy = self.y
-            self.oz = 2.5
+            self.oz = cfg.CONTROL.ALTITUDE
             self.oyaw = self.yaw
         # 1. armed. hovering
         elif self.arm_flag and not self.prep_flag and not self.flag:
-            self.twist_stamped.twist.linear.x = (self.ox - self.x)/4
-            self.twist_stamped.twist.linear.y = (self.oy - self.y)/4
-            self.twist_stamped.twist.linear.z = (self.oz - self.altitude)/10
-            self.twist_stamped.twist.angular.x = 0.0
-            self.twist_stamped.twist.angular.y = 0.0
-            self.twist_stamped.twist.angular.z = (self.oyaw - self.yaw)/4
-            self.globalAngle = self.yaw
-            self.currentAngle = self.yaw - np.radians(ROT_OFFSET) # TODO
-            self.accumulatedError = DEFAULT[EVENT]
-            self.prev_error = 0.0
-            self.currentTrack = 0.0
-            self.finish.data = False
-            self.get_logger().info(f'dx : {self.ox - self.x:6f}, dy : {self.oy - self.y:6f}, dz : {self.oz - self.altitude:6f}, dyaw : {self.oyaw - self.yaw:6f}')
+            self.moved = 0.0
+            if self.numPoly:
+                theta = self.polySlope
+                self.theta = theta
+                omega = np.radians(2.) if theta >= np.radians(1.0) else (np.radians(-2.0) if theta <= np.radians(-1.0) else 0.0)
+                self.twist_stamped.twist.linear.x = (self.ox - self.x)/cfg.CALIBRATION.POSITION[0]
+                self.twist_stamped.twist.linear.y = (self.oy - self.y)/cfg.CALIBRATION.POSITION[1]
+                self.twist_stamped.twist.linear.z = (self.oz - self.altitude)/cfg.CALIBRATION.POSITION[2]
+                self.twist_stamped.twist.angular.x = 0.0
+                self.twist_stamped.twist.angular.y = 0.0
+                self.twist_stamped.twist.angular.z = omega
+                self.globalAngle = self.yaw - np.radians(cfg.CALIBRATION.ANGLE)
+                self.currentAngle = self.yaw - np.radians(ROT_OFFSET) # TODO
+                self.accumulatedError = ORIGIN[EVENT]
+                self.prev_error = 0.0
+                self.currentTrack = 0.0
+                self.finish.data = False
             self.publisher.publish(self.twist_stamped)
         # 2. prepare to drive
         elif self.arm_flag and self.prep_flag and not self.flag:
+            self.velocity = 0.0
+            self.moved = 0.0
             if self.numPoly:
                 theta = self.polySlope
                 self.theta = theta
                 self.currentTrack = 0
                 omega = np.radians(2.) if theta >= np.radians(1.0) else (np.radians(-2.0) if theta <= np.radians(-1.0) else 0.0)
-                vely = -0.05 if self.error >= 0.05 else (0.05 if self.error <= -0.05 else 0.0)
-                self.twist_stamped.twist.linear.x = vely*np.sin(self.yaw)
-                self.twist_stamped.twist.linear.y = -vely*np.cos(self.yaw)
-                self.twist_stamped.twist.linear.z = (2.0-self.local_alt)/4
+                self.twist_stamped.twist.linear.x = (self.ox - self.x)/cfg.CALIBRATION.POSITION[0]
+                self.twist_stamped.twist.linear.y = (self.oy - self.y)/cfg.CALIBRATION.POSITION[1]
+                self.twist_stamped.twist.linear.z = (self.oz - self.altitude)/cfg.CALIBRATION.POSITION[2]
                 self.twist_stamped.twist.angular.x = 0.0
                 self.twist_stamped.twist.angular.y = 0.0
                 self.twist_stamped.twist.angular.z = omega
-                self.globalAngle = self.yaw
-                self.currentAngle = self.yaw - np.radians(ROT_OFFSET) # TODO
-                self.accumulatedError = DEFAULT[EVENT]
+                self.globalAngle = self.yaw - np.radians(cfg.CALIBRATION.ANGLE)
+                self.currentAngle = self.yaw - np.radians(ROT_OFFSET)
+                self.accumulatedError = ORIGIN[EVENT]
                 self.prev_error = 0.0
                 self.currentTrack = 0.0
                 self.finish.data = False
                 self.publisher.publish(self.twist_stamped)
         # 3. drive
-        elif self.arm_flag and self.prep_flag and self.flag and self.moved <= self.distance + 10:
-            # TODO from lidar
-            self.velocity = 11.0
-            tmp_vel = 11.0
-            self.count += 2.0*PERIOD
-            velocity = min(tmp_vel, self.count)
+        elif self.arm_flag and self.prep_flag and self.flag and self.moved <= self.distance + 5:
+            if AIRSIM == True:
+                self.velocity = cfg.CONTROL.VELOCITY_AUTO
+            else:
+                self.velocity = min(max(0.0, self.velocity), 8.0) + 0.3*self.runner_dx
+            velocity = self.velocity
             if self.numPoly:
                 # calculate theta
-                theta = self.polySlope*(velocity/3)
+                theta = self.polySlope
                 roll = self.roll
                 theta += roll
                 if abs(np.degrees(theta)) < 0.2:
@@ -363,13 +376,15 @@ class PositionPublisher(Node):
                 if EVENT == 0:
                     error = self.error
                     dvel = self.dvel_pid.compute(error)
-                    dvel = np.clip(dvel,-0.3, 0.3)
+                    dvel = np.clip(dvel,-DVEL_LIMIT, DVEL_LIMIT)
                     self.dvel = dvel
                     dtheta = self.dtheta_pid.compute(error)
                     theta = dtheta
-                    theta = np.clip(theta, np.radians(-2), np.radians(2))
+                    theta = np.clip(theta, np.radians(-THETA_LIMIT), np.radians(THETA_LIMIT))
                     self.globalAngle += theta*PERIOD
+                    self.globalAngle = self.yaw + theta*PERIOD - np.radians(cfg.CALIBRATION.ANGLE)
                     self.theta = theta
+                    self.moved += self.velocity*PERIOD
                 # 200m
                 elif EVENT == 1:
                     if (self.yaw - self.currentAngle >= np.pi or self.yaw - self.currentAngle <= -np.pi) and self.globalAngle >= np.pi/2:
@@ -378,11 +393,13 @@ class PositionPublisher(Node):
                         theta = 0.0
                         self.dtheta_pid.reset()
                         self.dvel_pid.reset()
-                        self.accumulatedError = DEFAULT[EVENT]
+                        self.accumulatedError = ORIGIN[EVENT]
                         error = (self.accumulatedError + self.error)
                         self.currentTrack = 0
+                        self.ox = self.x
+                        self.oy = self.y
                     dvel = self.dvel_pid.compute(error)
-                    dvel = np.clip(dvel,-0.4, 0.4)
+                    dvel = np.clip(dvel,-DVEL_LIMIT, DVEL_LIMIT)
                     self.dvel = dvel
                     dtheta = self.dtheta_pid.compute(error) # TODO another PID controller
                     if self.is_curve:
@@ -390,25 +407,30 @@ class PositionPublisher(Node):
                         theta += dtheta
                     else:
                         theta += dtheta
-                        theta = np.clip(theta, np.radians(-4), np.radians(4))
+                        theta = np.clip(theta, np.radians(-THETA_LIMIT), np.radians(THETA_LIMIT))
                     self.globalAngle += theta*PERIOD
                     self.theta = theta
-                 # 400m
+                    self.moved += self.velocity*PERIOD
+                # 400m
                 elif EVENT == 2:
                     pass
-                 # over 400m. velocity must be under 8m/s
+                # over 400m. velocity must be under 8m/s
                 else:
-                    if self.currentAngle >= np.pi:
-                        self.currentAngle -= np.pi
+                    if (self.yaw - self.currentAngle >= np.pi or self.yaw - self.currentAngle <= -np.pi) and self.globalAngle >= np.pi/2:
+                        self.is_curve = False
+                        self.currentAngle = self.yaw
                         theta = 0.0
                         self.dtheta_pid.reset()
                         self.dvel_pid.reset()
+                        self.accumulatedError = ORIGIN[EVENT]
+                        error = (self.accumulatedError + self.error)
+                        self.currentTrack = 0
+                        self.ox = self.x
+                        self.oy = self.y
                     dvel = self.dvel_pid.compute(error)
-                    dtheta = self.dtheta_pid.compute(error)
+                    dtheta = self.dtheta_pid.compute(error)*theta
                     self.dvel = dvel
                     theta += dtheta
-                    theta = theta
-                    self.currentAngle += theta*PERIOD
                     self.globalAngle += theta*PERIOD
                     self.theta = theta
 
@@ -420,28 +442,29 @@ class PositionPublisher(Node):
                 vely = velocity*np.sin(self.globalAngle)
                 self.twist_stamped.twist.linear.x = velx + dx
                 self.twist_stamped.twist.linear.y = vely + dy
-                self.twist_stamped.twist.linear.z = (2.0-self.local_alt)/2
+                self.twist_stamped.twist.linear.z = (self.oz - self.altitude)/cfg.CALIBRATION.POSITION[2]
                 self.twist_stamped.twist.angular.x = 0.0
                 self.twist_stamped.twist.angular.y = 0.0
                 self.twist_stamped.twist.angular.z = omega
                 self.publisher.publish(self.twist_stamped)
                 self.get_logger().info(f"angle : {np.degrees(self.globalAngle):5f}(deg), angle_flag : {np.degrees(self.currentAngle):5f}(deg), theta : {np.degrees(theta):5f}(deg), dtheta : {np.degrees(dtheta):5f}(deg)")
-                self.get_logger().info("x : {:.2f}(m/s), y : {:.2f}(m/s), omega : {:.2f}(deg/s)".format(self.twist_stamped.twist.linear.x, self.twist_stamped.twist.linear.y, np.degrees(theta)))
-                self.get_logger().info("moved : {:5f}(m), vel : {:5f}(m/s) dvel : {:5f}(m/s)".format(self.moved, velocity, dvel))
-
-        elif self.arm_flag and self.prep_flag and self.flag and self.moved > self.distance + 10:
+                self.get_logger().info("vx : {:.2f}(m/s), vy : {:.2f}(m/s), omega : {:.2f}(deg/s)".format(self.twist_stamped.twist.linear.x, self.twist_stamped.twist.linear.y, np.degrees(theta)))
+                self.get_logger().info("moved : {:5f}(m), vel : {:5f}(m/s) runner dx : {:5f}(m/s)".format(self.moved, velocity, self.runner_dx))
+                if self.moved > self.distance:
+                    self.ox = self.x 
+                    self.oy = self.y
+                    self.oyaw = self.yaw
+        elif self.arm_flag and self.prep_flag and self.flag and self.moved > self.distance + 5:
             self.finish.data = True
-            self.twist_stamped.twist.linear.x = 0.0
-            self.twist_stamped.twist.linear.y = 0.0
-            self.twist_stamped.twist.linear.z = (2.0-self.local_alt)/2
+            self.twist_stamped.twist.linear.x = (self.ox - self.x)/cfg.CALIBRATION.POSITION[0]
+            self.twist_stamped.twist.linear.y = (self.oy - self.y)/cfg.CALIBRATION.POSITION[1]
+            self.twist_stamped.twist.linear.z = (self.oz - self.altitude)/cfg.CALIBRATION.POSITION[2]
+            self.twist_stamped.twist.angular.z = (self.oyaw - self.yaw)/cfg.CALIBRATION.POSITION[2]
             self.publisher.publish(self.twist_stamped)
-            self.get_logger().warning(f'finishing.. {self.moved} : {self.finish.data}, flag : {self.flag}')
-            if self.drone_mode == 'AUTO.LOITER':
-                self.flag = False
-                self.moved = 0.0
-        self.get_logger().info(f'roll : {np.degrees(self.roll):5f} deg,  pitch : {np.degrees(self.pitch):5f} deg,  yaw : {np.degrees(self.yaw):5f} deg')
+            self.get_logger().warning(f'finishing.. {self.moved} : {self.finish.data}')
         self.save_droneInfo()
         self.finish_publisher.publish(self.finish)
+        self.get_logger().info(f'arm : {self.arm_flag}, pre : {self.prep_flag}, drive : {self.flag}')
 
 def main(args=None):
     rclpy.init(args=args)

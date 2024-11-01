@@ -6,7 +6,7 @@ from std_srvs.srv import SetBool
 class TakeoffClient(Node):
     def __init__(self):
         super().__init__('takeoff_client')
-        self.client = self.create_client(SetBool, 'server/takeoff')
+        self.client = self.create_client(SetBool, '/server/takeoff')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('takeoff service not available')
         self.req = SetBool.Request()

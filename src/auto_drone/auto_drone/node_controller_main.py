@@ -1,37 +1,29 @@
 import rclpy
 import time
-import cv2
 import os
 import datetime
+import sys
 from rclpy.node import Node
 from std_srvs.srv import SetBool
 from std_msgs.msg import Float64, Bool
-from geometry_msgs.msg import TwistStamped
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from mavros_msgs.msg import State
 from mavros_msgs.srv import (
     CommandBool,
     CommandTOL,
-    SetMode,
-    CommandLong
+    SetMode
 )
-
-TIMER = True
-PERIOD = 0.05
-WIDTH, HEIGHT = 480, 360
-qos_profile = QoSProfile(
-reliability=ReliabilityPolicy.BEST_EFFORT,
-durability=DurabilityPolicy.VOLATILE,
-history=HistoryPolicy.KEEP_LAST,
-depth=1
-)
-stablizing_time = 5
-termination_time = 0.1
-mode_response_time = 10
-alt_threshold = 1.6
-land_threshold = 0.0
+BASE = os.getcwd()
+sys.path.append(os.path.join(BASE))
+from tools import *
+from config import cfg
+qos_profile = cfg.qos_profile
+PERIOD = cfg.CONTROL.PERIOD
+WIDTH, HEIGHT = cfg.WIDTH, cfg.HEIGHT
+stablizing_time = cfg.CALIBRATION.stablizing_time
+termination_time = cfg.CALIBRATION.termination_time
+mode_response_time = cfg.CALIBRATION.mode_response_time
+alt_threshold = cfg.CALIBRATION.alt_threshold
+land_threshold = cfg.CALIBRATION.land_threshold
 
 def get_current_time_string():
     now = datetime.datetime.now()
@@ -39,19 +31,24 @@ def get_current_time_string():
     return time_str
 
 def send_switch_signal(switch_node, signal):
+    switch_node.set_data(signal)
     while True:
+        switch_node.get_logger().info('send test')
         rclpy.spin_once(switch_node)
-        if switch_node.switch == signal:
+        if switch_node.success == True:
             break
 
 class MainServer(Node):
     def __init__(self):
         super().__init__('main_server')
-        self.takeoff_service = self.create_service(SetBool, 'server/takeoff', self.get_takeoff)
-        self.drive_service = self.create_service(SetBool, 'server/drive', self.get_drive)
-        self.drive_auto_service = self.create_service(SetBool, 'server/drive_auto', self.get_drive_auto)
-        self.drive_termination_service = self.create_service(SetBool, 'server/drive_termination', self.get_drive_termination)
-        self.land_service = self.create_service(SetBool, 'server/land', self.get_land)
+        self.takeoff_service = self.create_service(SetBool, '/server/takeoff', self.get_takeoff)
+        self.drive_service = self.create_service(SetBool, '/server/drive', self.get_drive)
+        self.drive_auto_service = self.create_service(SetBool, '/server/drive_auto', self.get_drive_auto)
+        self.drive_termination_service = self.create_service(SetBool, '/server/drive_termination', self.get_drive_termination)
+        self.land_service = self.create_service(SetBool, '/server/land', self.get_land)
+        self.subscriber_finish = self.create_subscription(
+            Bool, '/vel_data/finish', self.sub_finish, 10)
+        self.finish = False
         self.cmd_state = 0
 
     def get_takeoff(self, request, response):
@@ -88,15 +85,7 @@ class MainServer(Node):
             response.success = True
             self.cmd_state = -1
         return response
-
-
-class FinishNode(Node):
-    def __init__(self):
-        super().__init__('finish_node')
-        self.subscriber_finish = self.create_subscription(
-            Bool, 'vel_data/finish', self.sub_finish, qos_profile)
-        self.finish = False
-
+    
     def sub_finish(self, data):
         self.finish = data.data
 
@@ -158,77 +147,100 @@ class LandNode(Node):
 class ArmingSwitchNode(Node):
     def __init__(self):
         super().__init__('armswitch_node')                                                             
-        self.client = self.create_client(SetBool, 'vel_data/arming_switch')
+        self.client = self.create_client(SetBool, '/vel_data/arming_switch')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('arm switch node : service not available, waiting again...')
         self.request = SetBool.Request()
         self.timer = self.create_timer(0.1, self.send_request)
         self.switch = False
+        self.success = False
 
     def send_request(self):
+        self.request.data = self.switch
         future = self.client.call_async(self.request)
         if future:
             self.get_logger().info('switching..')
-            self.switch = not self.switch
+            self.success = True
         else:
             self.get_logger().info('switching request fail..')
 
+    def set_data(self, signal):
+        self.switch = signal
+        self.success = False
 
 class DrivePreparationSwitch(Node):
     def __init__(self):
         super().__init__('driveprepswitch_node')                                                             
-        self.client = self.create_client(SetBool, 'vel_data/preparation_switch')
+        self.client = self.create_client(SetBool, '/vel_data/preparation_switch')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('drive preparation switch node : service not available, waiting again...')
         self.request = SetBool.Request()
         self.timer = self.create_timer(0.1, self.send_request)
         self.switch = False
+        self.success = False
 
     def send_request(self):
+        self.request.data = self.switch
         future = self.client.call_async(self.request)
         if future:
             self.get_logger().info('switching..')
-            self.switch = not self.switch
+            self.success = True
         else:
             self.get_logger().info('switching request fail..')
+    
+    def set_data(self, signal):
+        self.switch = signal
+        self.success = False
 
 
 class DriveSwitchNode(Node):
     def __init__(self):
         super().__init__('driveswitch_node')                                                             
-        self.client = self.create_client(SetBool, 'vel_data/drive_switch')
+        self.client = self.create_client(SetBool, '/vel_data/drive_switch')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('drive switch node : service not available, waiting again...')
         self.request = SetBool.Request()
         self.timer = self.create_timer(0.1, self.send_request)
         self.switch = False
+        self.success = False
 
     def send_request(self):
+        self.request.data = self.switch
         future = self.client.call_async(self.request)
         if future:
             self.get_logger().info('switching..')
-            self.switch = not self.switch
+            self.success = True
         else:
             self.get_logger().info('switching request fail..')
+    
+    def set_data(self, signal):
+        self.switch = signal
+        self.success = False
 
 
 class VideoSwitchNode(Node):
     def __init__(self):
         super().__init__('videoswitch_node')                                                             
-        self.client = self.create_client(SetBool, 'video/switch')
+        self.client = self.create_client(SetBool, '/video/switch')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('video switch node : service not available, waiting again...')
         self.request = SetBool.Request()
         self.timer = self.create_timer(0.1, self.send_request)
         self.switch = False
+        self.success = False
 
     def send_request(self):
+        self.request.data = self.switch
         future = self.client.call_async(self.request)
         if future:
             self.get_logger().info('switching..')
-            self.switch = not self.switch
+            self.success = False
         else:
             self.get_logger().info('switching request fail..')
+    
+    def set_data(self, signal):
+        self.switch = signal
+        self.success = False
 
 
 class StateListener(Node):
@@ -294,9 +306,7 @@ def main(args=None):
     videoswitch_node = VideoSwitchNode()
     state_listener = StateListener()
     mode_changer = ModeChanger()
-    finish_node = FinishNode()
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     os.makedirs('drone_video', exist_ok=True)
     # state : loiter(0), takeoff(1), land(2), drive(etc)
     while True:
@@ -314,11 +324,12 @@ def main(args=None):
                 rclpy.spin_once(arm_node)
                 rclpy.spin_once(state_listener)
             send_switch_signal(armswitch_node, True)
-            time.sleep(3)
-            mode_changer.send_mode_change_request('OFFBOARD')
-            mode_changer.get_logger().info('takeoff stablizing..')
             time.sleep(stablizing_time)
-            rclpy.spin_once(state_listener)
+            while state_listener.msg_mode != 'OFFBOARD':
+                mode_changer.send_mode_change_request('OFFBOARD')
+                mode_changer.get_logger().info('takeoff stablizing..')
+                time.sleep(PERIOD)
+                rclpy.spin_once(state_listener)
             # if loiter mode or no velocity topic, not switching to drive mode
             if state_listener.msg_mode == 'AUTO.LOITER':
                 mode_changer.get_logger().warn(f'no velocity topic!')
@@ -354,20 +365,18 @@ def main(args=None):
                 state_listener.get_logger().warn(f'not armed!')
                 main_server.cmd_state = 0
                 continue
-            # TODO : adjust zero point and do drive
             send_switch_signal(driveprepswitch_node, True)
-            time.sleep(stablizing_time)
+            time.sleep(stablizing_time+3)
             # 3. select rulebase drive mode. record video
             if main_server.cmd_state == 3:
                 # switch to drive mode
                 send_switch_signal(videoswitch_node, True)
                 send_switch_signal(driveswitch_node, True)
                 # drive
-                while not finish_node.finish:
-                    rclpy.spin_once(finish_node)
+                while not main_server.finish:
                     rclpy.spin_once(main_server)
-                    time.sleep(PERIOD)
-                    if main_server.cmd_state == -1:
+                    # time.sleep(PERIOD)
+                    if main_server.cmd_state == -1 or main_server.finish == True:
                         break
                 # turn off switch
                 send_switch_signal(videoswitch_node, False)
@@ -377,14 +386,14 @@ def main(args=None):
                 # switch to drive mode
                 send_switch_signal(driveswitch_node, True)
                 # drive
-                while not finish_node.finish:
-                    rclpy.spin_once(finish_node)
+                while not main_server.finish:
                     rclpy.spin_once(main_server)
-                    time.sleep(PERIOD)
-                    if main_server.cmd_state == -1:
+                    # time.sleep(PERIOD)
+                    if main_server.cmd_state == -1 or main_server.finish == True:
                         break
                 # turn off switch
                 send_switch_signal(driveswitch_node, False)
+            send_switch_signal(driveprepswitch_node, False)
             if main_server.cmd_state >= 0:
                 time.sleep(stablizing_time)
             else:
@@ -404,7 +413,6 @@ def main(args=None):
     videoswitch_node.destroy_node()
     state_listener.destroy_node()
     mode_changer.destroy_node()
-    finish_node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
