@@ -5,7 +5,7 @@ from std_srvs.srv import SetBool
 class DriveClient(Node):
     def __init__(self):
         super().__init__('drive_client')
-        self.client = self.create_client(SetBool, 'server/drive')
+        self.client = self.create_client(SetBool, '/server/drive')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('drive service not available')
         self.req = SetBool.Request()

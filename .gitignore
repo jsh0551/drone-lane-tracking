@@ -5,7 +5,16 @@ exp
 weights
 ros_ws/build
 ros_ws/install
+ros_ws/customModule
 dev_ws/build
 dev_ws/install
 DRL_model1.py
 test_video
+build
+install
+drone_data/*
+drone_video/*
+drone_video_viz/*
+src/model_linedet/weights_dqll/*.pth
+src/model_linedet/weights_dqll/*.pt
+*.pt
