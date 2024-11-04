@@ -6,15 +6,12 @@ import struct
 import pprint
 import math
 # WSL의 IP 주소 및 포트 설정
-WSL_IP = '172.25.113.219'  # WSL IP 주소로 수정하세요
-PORT = 50101
+WSL_IP = '172.25.113.219'  # TODO : WSL IP 주소
+PORT = 50101 # TODO : 개방된 TCP 포트
 
 # TCP 소켓 설정
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((WSL_IP, PORT))
-# sock.bind((WSL_IP, PORT))
-# sock.listen(1)
-# conn, addr = sock.accept()
 pp = pprint.PrettyPrinter(indent=4)
 
 client = airsim.MultirotorClient()
@@ -54,19 +51,10 @@ while True:
         data = img_encoded.tobytes()
 
         # 데이터 크기 전송
-        # sock.sendall(struct.pack('>I', len(data)))
-
-        # # 이미지 데이터 전송
-        # sock.sendall(data)
-        # 데이터 크기 전송
         message = struct.pack('>I', len(data)) + data + struct.pack('>fff', yaw, pitch, roll)
         sock.sendall(message)
-        # sock.sendall(struct.pack('>I', len(data)))
         # cv2.imshow("object", img_rgb)                             # 使用OpenCV显示处理后的图像效果
         # cv2.waitKey(10)
-        # # 이미지 데이터 전송
-        # sock.sendall(data)
-        # sock.sendall(struct.pack('>ff', pitch, roll))
     except KeyboardInterrupt:
         break
 
