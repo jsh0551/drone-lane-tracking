@@ -22,8 +22,14 @@
 	- Unreal Engine (4.27.2)
 		- Library : [Olympics Athletics Stadium](https://www.fab.com/ko/listings/38ebbdc2-d89f-4a20-8057-5ff228b7f778)
 	- [AIRSIM](https://microsoft.github.io/AirSim/build_windows/)
+ - Hardware
+   - single board computer : NVIDIA Jetson Orin NX
+     - [Jetpack 6.0](https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048)
+   - flight controller : Holybro Pixhawk 6C Mini
+   - camera : oCam-5CRO-U-M
+   - LIDAR : Benewake TFmini Plus
 - OS
-	- Version : Ubuntu-22.04
+  - version : Ubuntu-22.04
   - cuda-toolkit : 11.8
 - ROS Version
 	- [ROS2-humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html#install-ros-2-packages)
@@ -31,13 +37,13 @@
   - torch==2.2.0
   - torchaudio==2.2.0
   - torchvision==0.17.0
-  - mmcv==1.7.2
+  - mmcv-full==1.7.2
   - opencv-python==4.9.0.80
   - opencv-contrib-python==4.9.0.80
   - ultralytics
   - easydict
    
-## Installation
+## Installation (AIRSIM)
 ### Windows11
 
 ```
@@ -103,27 +109,36 @@ wget https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/inst
     ```
 
 - Field test
-
+  - pixhawk 연결된 usb 포트에 권한 부여 후 mavros 실행
+    ```
+    sudo chmod a+rw /dev/ttyUSB0
+    ros2 run mavros mavros_node --ros-args -p fcu_url:=/dev/ttyUSB0:57600 --params-file ./px4_config.yaml
+    ```
+  - launch 파일 실행
+    ```
+    ros2 launch auto_drone auto_drone_launch.py
+    ```
+    
 ### Command
 
 1. 이륙
 ```
 # in WSL2
-## terminal 4
+## command terminal
 ros2 run auto_drone takeoff
 ros2 run auto_drone drive
 ros2 run auto_drone land
 ```
-2-1. 주행 (record)
+2-1. 주행 (recording)
 ```
 # in WSL2
-## terminal 4
+## command terminal
 ros2 run auto_drone drive
 ```
-2-2. 주행 (not record)
+2-2. 주행 (not recording)
 ```
 # in WSL2
-## terminal 4
+## command terminal
 ros2 run auto_drone drive_auto
 ```
 
