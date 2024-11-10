@@ -126,8 +126,6 @@ wget https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/inst
 # in WSL2
 ## command terminal
 ros2 run auto_drone takeoff
-ros2 run auto_drone drive
-ros2 run auto_drone land
 ```
 2-1. 주행 (recording)
 ```
